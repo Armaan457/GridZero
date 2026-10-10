@@ -1,0 +1,104 @@
+@import "tailwindcss";
+
+:root {
+  --background: #fffefa;
+  --foreground: #203b32;
+  --pure-white: #ffffff;
+  --warm-white: #fffefa;
+  --soft-off-white: #f8faf6;
+  --misty-sage: #f1f7f0;
+  --pale-mint: #e8f2e8;
+  --light-sage: #dcebdd;
+  --soft-eucalyptus: #c8dec9;
+  --muted-sage: #a8cdb5;
+  --primary-teal: #287c73;
+  --deep-teal: #226b63;
+  --dark-teal: #1a554f;
+  --warm-golden: #f5c84c;
+  --bright-gold: #ffd966;
+  --pale-butter: #fff2b8;
+  --warm-beige: #e9e1d0;
+  --muted-grey-green: #64746b;
+  --deep-sage-text: #344a40;
+  --dark-forest: #203b32;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-warm-white: var(--warm-white);
+  --color-soft-off-white: var(--soft-off-white);
+  --color-misty-sage: var(--misty-sage);
+  --color-pale-mint: var(--pale-mint);
+  --color-light-sage: var(--light-sage);
+  --color-eucalyptus: var(--soft-eucalyptus);
+  --color-muted-sage: var(--muted-sage);
+  --color-teal: var(--primary-teal);
+  --color-deep-teal: var(--deep-teal);
+  --color-dark-teal: var(--dark-teal);
+  --color-gold: var(--warm-golden);
+  --color-butter: var(--pale-butter);
+  --color-beige: var(--warm-beige);
+  --color-sage-muted: var(--muted-grey-green);
+  --color-sage-text: var(--deep-sage-text);
+  --color-forest: var(--dark-forest);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+  --font-display: var(--font-fraunces);
+}
+
+body {
+  background: linear-gradient(135deg, #ffffff 0%, #f1f7f0 50%, #e8f2e8 100%);
+  color: var(--foreground);
+  font-family: var(--font-geist-sans), system-ui, sans-serif;
+}
+
+.btn-teal {
+  background: linear-gradient(135deg, #287c73 0%, #226b63 100%);
+  color: #ffffff;
+  transition:
+    transform 0.25s ease,
+    box-shadow 0.25s ease,
+    filter 0.25s ease;
+}
+
+.btn-teal:hover {
+  transform: translateY(-2px) scale(1.03);
+  box-shadow: 0 12px 28px rgba(40, 124, 115, 0.28);
+  filter: brightness(1.06);
+}
+
+.btn-teal:active {
+  transform: translateY(0) scale(0.98);
+}
+
+.btn-outline-teal {
+  border: 1.5px solid #287c73;
+  color: #1a554f;
+  background: rgba(255, 254, 250, 0.7);
+  transition:
+    transform 0.25s ease,
+    background 0.25s ease,
+    box-shadow 0.25s ease,
+    color 0.25s ease;
+}
+
+.btn-outline-teal:hover {
+  transform: translateY(-2px);
+  background: #287c73;
+  color: #ffffff;
+  box-shadow: 0 10px 24px rgba(40, 124, 115, 0.2);
+}
+
+.card-lift {
+  transition:
+    transform 0.3s ease,
+    box-shadow 0.3s ease,
+    border-color 0.3s ease;
+}
+
+.card-lift:hover {
+  transform: translateY(-6px);
+  box-shadow: 0 16px 40px rgba(32, 59, 50, 0.08);
+  border-color: #a8cdb5;
+}
