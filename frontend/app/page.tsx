@@ -1,3 +1,5 @@
+import NeighborhoodFlow from "./components/NeighborhoodFlow";
+
 const modes = [
   {
     name: "Static",
@@ -85,46 +87,48 @@ export default function Home() {
       </nav>
 
       <main id="top">
-        <section className="relative overflow-hidden pt-1">
-          <div
-            aria-hidden
-            className="pointer-events-none absolute inset-0"
-            style={{
-              background:
-                "radial-gradient(ellipse 70% 50% at 80% 10%, #fff2b8 0%, transparent 55%), radial-gradient(ellipse 50% 40% at 10% 80%, #c8dec9 0%, transparent 50%)",
-            }}
-          />
-          <div className="relative mx-auto grid max-w-6xl gap-12 px-6 pt-10 pb-20 md:grid-cols-2 md:items-center md:pt-36 md:pb-28">
-            <div>
-              <h1 className="font-display text-4xl leading-tight text-forest sm:text-5xl lg:text-6xl">
-                Share rooftop sun with the house next door
-              </h1>
-              <p className="mt-6 max-w-xl text-lg leading-8 text-sage-text">
-                Grove Grid is a virtual allocation for neighborhood solar. Your surplus
-                goes onto the shared grid; a neighbor draws from it. We decide whose
-                export covers whose import — fairly, locally, and in every time slot.
-              </p>
-              <div className="mt-8 flex flex-col gap-3 sm:flex-row">
-                <a
-                  href="#cta"
-                  className="btn-teal inline-flex h-12 items-center justify-center rounded-full px-8 text-base font-medium"
-                >
-                  Start a local share
-                </a>
-                <a
-                  href="#how"
-                  className="btn-outline-teal inline-flex h-12 items-center justify-center rounded-full px-8 text-base font-medium"
-                >
-                  See the matching engine
-                </a>
+        <section id="hero-pin" className="relative h-[220vh]">
+          <div className="sticky top-0 flex min-h-screen items-center overflow-hidden">
+            <div
+              aria-hidden
+              className="pointer-events-none absolute inset-0"
+              style={{
+                background:
+                  "radial-gradient(ellipse 70% 50% at 80% 10%, #fff2b8 0%, transparent 55%), radial-gradient(ellipse 50% 40% at 10% 80%, #c8dec9 0%, transparent 50%)",
+              }}
+            />
+            <div className="relative mx-auto grid w-full max-w-6xl items-center gap-8 px-6 pt-24 pb-10 md:grid-cols-2 md:pt-28">
+              <div>
+                <h1 className="font-display text-4xl leading-tight text-forest sm:text-5xl lg:text-6xl">
+                  Share rooftop sun with the house next door
+                </h1>
+                <p className="mt-6 max-w-xl text-lg leading-8 text-sage-text">
+                  Grove Grid is a virtual allocation for neighborhood solar. Your surplus
+                  goes onto the shared grid; a neighbor draws from it. We decide whose
+                  export covers whose import — fairly, locally, and in every time slot.
+                </p>
+                <div className="mt-8 flex flex-col gap-3 sm:flex-row">
+                  <a
+                    href="#cta"
+                    className="btn-teal inline-flex h-12 items-center justify-center rounded-full px-8 text-base font-medium"
+                  >
+                    Start a local share
+                  </a>
+                  <a
+                    href="#how"
+                    className="btn-outline-teal inline-flex h-12 items-center justify-center rounded-full px-8 text-base font-medium"
+                  >
+                    See the matching engine
+                  </a>
+                </div>
+                <p className="mt-6 text-sm text-sage-muted">
+                  Sellers earn more than a feed-in tariff. Buyers pay less than retail.
+                  The discom is paid for the wires.
+                </p>
               </div>
-              <p className="mt-6 text-sm text-sage-muted">
-                Sellers earn more than a feed-in tariff. Buyers pay less than retail.
-                The discom is paid for the wires.
-              </p>
-            </div>
 
-            <div aria-hidden className="min-h-[280px]" />
+              <NeighborhoodFlow />
+            </div>
           </div>
         </section>
 
