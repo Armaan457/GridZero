@@ -78,7 +78,7 @@ export default function Home() {
             </a>
           </div>
           <a
-            href="#cta"
+            href="/dashboard"
             className="btn-teal inline-flex h-9 items-center rounded-full px-4 text-sm font-medium"
           >
             Dashboard
