@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>P2P Energy Engine - Live Simulation</title>
+<style>
+:root{--bg:#f5f6f8;--card:#fff;--ink:#1c2230;--mute:#6b7385;--line:#e3e6ec;--sup:#1f9d55;--buy:#d9480f;--neu:#8b93a5;--acc:#2563eb;--warn:#b45309}
+*{box-sizing:border-box}body{margin:0;font:14px/1.45 system-ui,Segoe UI,Roboto,sans-serif;background:var(--bg);color:var(--ink)}
+header{display:flex;flex-wrap:wrap;gap:12px;align-items:center;padding:12px 20px;background:var(--card);border-bottom:1px solid var(--line);position:sticky;top:0;z-index:5}
+h1{font-size:17px;margin:0 12px 0 0}.clock{font-weight:700;font-size:16px;padding:4px 10px;border:1px solid var(--line);border-radius:8px}
+button,select{font:inherit;padding:6px 12px;border:1px solid var(--line);border-radius:8px;background:#fff;cursor:pointer}
+button.primary{background:var(--acc);color:#fff;border-color:var(--acc)}button:hover{filter:brightness(.96)}
+.badge{font-size:11px;padding:2px 8px;border-radius:99px;background:#eef2ff;color:var(--acc)}
+main{padding:16px 20px;max-width:1300px;margin:auto;display:grid;gap:14px}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+.kpi{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:10px 12px}.kpi b{display:block;font-size:20px}.kpi span{color:var(--mute);font-size:12px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px 14px}.card h2{font-size:14px;margin:0 0 8px}
+.grid2{display:grid;grid-template-columns:2fr 1fr;gap:14px}@media(max-width:900px){.grid2{grid-template-columns:1fr}}
+.nodes{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:10px}
+.node{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:10px;border-top:4px solid var(--neu)}
+.node.supplier{border-top-color:var(--sup)}.node.buyer{border-top-color:var(--buy)}
+.node .top{display:flex;justify-content:space-between;align-items:center;font-weight:700}
+.role{font-size:11px;font-weight:600;padding:1px 8px;border-radius:99px;color:#fff;background:var(--neu)}.supplier .role{background:var(--sup)}.buyer .role{background:var(--buy)}
+.bar{height:6px;background:#eceff4;border-radius:4px;margin:3px 0 6px;overflow:hidden}.bar i{display:block;height:100%}
+.row{display:flex;justify-content:space-between;font-size:12px;color:var(--mute)}.row b{color:var(--ink)}
+.node button{width:100%;margin-top:6px;font-size:12px;padding:4px}
+table{width:100%;border-collapse:collapse;font-size:12px}th,td{padding:4px 6px;border-bottom:1px solid var(--line);text-align:right}th:first-child,td:first-child{text-align:left}th{color:var(--mute);font-weight:600}
+.ev{padding:6px 8px;border-left:3px solid var(--warn);background:#fff8ed;margin-bottom:6px;font-size:12px;border-radius:4px}
+.flow{font-size:12px;display:flex;flex-wrap:wrap;gap:6px}.flow span{background:#eefbf3;border:1px solid #c9ecd6;border-radius:6px;padding:2px 8px}
+canvas{width:100%;height:230px}.legend{display:flex;gap:14px;font-size:12px;color:var(--mute);margin-top:4px;flex-wrap:wrap}.legend i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:4px}
+small{color:var(--mute)}
+</style></head><body>
+<header>
+  <h1>⚡ P2P Energy Engine</h1>
+  <div class="clock" id="clock">Day 0 · 00:00</div>
+  <button class="primary" id="btnRun">▶ Start</button><button id="btnStep">Step +1h</button><button id="btnReset">Reset</button>
+  <label>Speed <select id="speed"><option value="0.5">0.5 h/s</option><option value="1" selected>1 h/s</option><option value="3">3 h/s</option><option value="8">8 h/s</option></select></label>
+  <label>Sharing mode <select id="mode"><option>hybrid</option><option>dynamic</option><option>static</option></select></label>
+  <span class="badge" id="fsrc">forecast: -</span>
+</header>
+<main>
+  <div class="kpis" id="kpis"></div>
+  <div class="grid2">
+    <div class="card"><h2>Community supply vs demand (kWh per hour)</h2><canvas id="chart" width="900" height="230"></canvas>
+      <div class="legend"><span><i style="background:#1f9d55"></i>Supply offered</span><span><i style="background:#d9480f"></i>Unmet-by-self demand</span><span><i style="background:#2563eb"></i>Matched P2P (actual)</span><span><i style="background:#9aa5ff"></i>Matched P2P (agent plan)</span></div></div>
+    <div class="card"><h2>Live events</h2><div id="events"><small>Press "+3 kWh" on a home to simulate a sudden load the agent didn't predict.</small></div>
+      <h2 style="margin-top:12px">Energy flows this hour</h2><div class="flow" id="flows"><small>-</small></div></div>
+  </div>
+  <div class="card"><h2>Homes (virtual smart meters) <small id="slotinfo"></small></h2><div class="nodes" id="nodes"></div></div>
+  <div class="grid2">
+    <div class="card"><h2>User ledger <select id="ledNode"></select> <small>(units for discom part; money only for P2P)</small></h2><div style="max-height:300px;overflow:auto"><table id="ledger"></table></div></div>
+    <div class="card"><h2>Statement</h2><div id="stmt"></div>
+      <h2 style="margin-top:14px">Compare sharing modes <button id="btnCmp" style="margin-left:8px">Run (3 days, same data)</button></h2><div id="cmp"><small>Runs Static / Dynamic / Hybrid on identical data.</small></div></div>
+  </div>
+</main>
+<script>
+const $=id=>document.getElementById(id), post=(p)=>fetch(p,{method:'POST'}).then(r=>r.json()), f2=x=>(+x).toFixed(2);
+let S=null, ledSel=null;
+$('btnRun').onclick=()=>post(S&&S.running?'/pause':'/start'); $('btnStep').onclick=()=>post('/step'); $('btnReset').onclick=()=>post('/reset?mode='+$('mode').value);
+$('speed').onchange=e=>post('/speed?value='+e.target.value); $('mode').onchange=e=>post('/mode?name='+e.target.value);
+$('ledNode').onchange=e=>{ledSel=e.target.value;loadLedger()};
+$('btnCmp').onclick=async()=>{$('cmp').innerHTML='Running...';const d=await (await fetch('/compare?days=3')).json();
+ $('cmp').innerHTML='<table><tr><th>Mode</th><th>Homes fully served</th><th>Fairness</th><th>P2P kWh</th><th>Grid import</th></tr>'+d.map(r=>`<tr><td>${r.mode}</td><td>${r.homes_fully_served_pct}%</td><td>${r.fairness_jain}</td><td>${r.p2p_kwh}</td><td>${r.grid_import_kwh}</td></tr>`).join('')+'</table><small>Dynamic serves the most homes completely; Static is fairest; Hybrid balances both.</small>'};
+const hh=h=>String(h).padStart(2,'0')+':00';
+function render(){ if(!S) return; const s=S.summary, L=S.last;
+ $('clock').textContent=`Day ${S.day} · ${hh(S.hour)}`; $('btnRun').textContent=S.running?'⏸ Pause':'▶ Start'; $('mode').value=S.mode;
+ $('fsrc').textContent='forecast: '+(L?L.forecast_source:'-');
+ $('kpis').innerHTML=[['P2P energy shared',f2(s.p2p_kwh)+' kWh'],['Supply used',s.supply_used_pct+'%'],['Demand met by P2P',s.demand_met_by_p2p_pct+'%'],['Grid import',f2(s.grid_import_kwh)+' kWh'],['User gain',`₹${s.user_gain_rs}`],['Discom grid fee',`₹${s.discom_fee_rs}`],['Forecast error (load)',s.forecast_mae_load+' kWh']]
+  .map(k=>`<div class="kpi"><b>${k[1]}</b><span>${k[0]}</span></div>`).join('');
+ const nodes=L?L.nodes:S.nodes.map(n=>({node:n.id,role:'neutral',load:0,solar:0,soc:n.soc,planned_p2p:0,p2p_bought:0,p2p_sold:0,grid_import:0,grid_export:0}));
+ const info=Object.fromEntries(S.nodes.map(n=>[n.id,n])), mx=Math.max(1,...nodes.map(n=>Math.max(n.load,n.solar)));
+ if(L) $('slotinfo').textContent=`(showing ${hh(L.slot.hour)} on day ${L.slot.day}, price ₹${L.slot.price}/kWh)`;
+ $('nodes').innerHTML=nodes.map(n=>{const i=info[n.node], q=S.pending[n.node];
+  return `<div class="node ${n.role}"><div class="top"><span>Home ${n.node}</span><span class="role">${n.role}</span></div>
+  <small>${i.panel_kw?i.panel_kw+' kW solar':'no solar'}${i.battery_kwh?' · '+i.battery_kwh+' kWh battery':''}</small>
+  <div class="row"><span>Load</span><b>${f2(n.load)}</b></div><div class="bar"><i style="width:${100*n.load/mx}%;background:#d9480f"></i></div>
+  <div class="row"><span>Solar</span><b>${f2(n.solar)}</b></div><div class="bar"><i style="width:${100*n.solar/mx}%;background:#1f9d55"></i></div>
+  ${i.battery_kwh?`<div class="row"><span>Battery</span><b>${f2(n.soc)} / ${i.battery_kwh}</b></div><div class="bar"><i style="width:${100*n.soc/i.battery_kwh}%;background:#2563eb"></i></div>`:''}
+  <div class="row"><span>P2P bought (planned)</span><b>${f2(n.p2p_bought)} (${f2(n.planned_p2p)})</b></div>
+  <div class="row"><span>P2P sold</span><b>${f2(n.p2p_sold)}</b></div>
+  <div class="row"><span>Discom import / export</span><b>${f2(n.grid_import)} / ${f2(n.grid_export)}</b></div>
+  <button onclick="post('/inject?node=${n.node}&kwh=3')">${q?'⚡ queued +'+q+' kWh':'⚡ +3 kWh sudden demand'}</button></div>`}).join('');
+ if(!$('ledNode').options.length){$('ledNode').innerHTML=S.nodes.map(n=>`<option>${n.id}</option>`).join('');ledSel=S.nodes[0].id}
+ $('flows').innerHTML=L&&L.matches.length?L.matches.map(m=>`<span>${m.seller} → ${m.buyer}: ${f2(m.kwh)} kWh</span>`).join(''):'<small>No P2P flow this hour.</small>';
+ $('events').innerHTML=S.events.length?S.events.slice().reverse().map(e=>`<div class="ev"><b>D${e.day} ${hh(e.hour)}</b> ${e.text}</div>`).join(''):$('events').innerHTML;
+ drawChart(S.history);
+}
+function drawChart(h){const c=$('chart'),x=c.getContext('2d'),W=c.width,H=c.height,p=28;x.clearRect(0,0,W,H);
+ if(!h.length) return; const mx=Math.max(1,...h.map(s=>Math.max(s.supply,s.demand,s.matched,s.planned_matched)))*1.1;
+ x.strokeStyle='#e3e6ec';x.fillStyle='#6b7385';x.font='11px sans-serif';
+ for(let i=0;i<=4;i++){const y=p+(H-2*p)*i/4;x.beginPath();x.moveTo(p,y);x.lineTo(W-6,y);x.stroke();x.fillText((mx*(1-i/4)).toFixed(1),0,y+3)}
+ const line=(k,col,w=2,d=[])=>{x.beginPath();x.setLineDash(d);x.strokeStyle=col;x.lineWidth=w;h.forEach((s,i)=>{const X=p+(W-p-6)*i/Math.max(1,h.length-1),Y=H-p-(H-2*p)*s[k]/mx;i?x.lineTo(X,Y):x.moveTo(X,Y)});x.stroke();x.setLineDash([])};
+ line('supply','#1f9d55');line('demand','#d9480f');line('planned_matched','#9aa5ff',2,[5,4]);line('matched','#2563eb',3);
+ x.fillStyle='#6b7385';[0,Math.floor(h.length/2),h.length-1].forEach(i=>x.fillText(hh(h[i].hour),p+(W-p-6)*i/Math.max(1,h.length-1)-14,H-8))}
+async function loadLedger(){ if(!ledSel) return;
+ const rows=await (await fetch(`/ledger/${ledSel}?limit=14`)).json(), st=await (await fetch('/statement/'+ledSel)).json();
+ $('ledger').innerHTML='<tr><th>Slot</th><th>Discom import</th><th>Discom export</th><th>P2P bought</th><th>P2P sold</th><th>Pay / Earn (₹)</th></tr>'+
+  rows.map(r=>`<tr><td>D${r.day} ${hh(r.hour)}</td><td>${f2(r.grid_import)}</td><td>${f2(r.grid_export)}</td><td>${r.p2p_bought>0?'+'+f2(r.p2p_bought)+' credited':'-'}</td><td>${r.p2p_sold>0?'-'+f2(r.p2p_sold)+' sold':'-'}</td><td>${r.p2p_owed_rs?'pay '+r.p2p_owed_rs:r.p2p_earned_rs?'earn '+r.p2p_earned_rs:'-'}</td></tr>`).join('');
+ $('stmt').innerHTML=`<table><tr><td>Discom import</td><td>${st.discom_import_kwh} kWh</td></tr><tr><td>Discom export</td><td>${st.discom_export_kwh} kWh</td></tr><tr><td>P2P sold</td><td>${st.p2p_sold_kwh} kWh · earned ₹${st.p2p_earned_rs}</td></tr><tr><td>P2P bought</td><td>${st.p2p_bought_kwh} kWh · owed ₹${st.p2p_owed_rs}</td></tr><tr><td>Grid fee (on discom bill)</td><td>₹${st.grid_fee_on_discom_bill_rs}</td></tr><tr><td><b>Net wallet</b></td><td><b>₹${st.net_wallet_rs}</b></td></tr></table><small>${st.note}</small>`}
+async function poll(){try{S=await (await fetch('/state')).json();render()}catch(e){} setTimeout(poll,500)}
+poll(); setInterval(loadLedger,1500);
+</script></body></html>
