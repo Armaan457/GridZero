@@ -224,13 +224,13 @@ export default function Home() {
             </p>
             <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
               <a
-                href="#"
+                href="/live"
                 className="inline-flex h-12 items-center rounded-full bg-warm-white px-8 text-base font-medium text-dark-teal transition duration-300 hover:-translate-y-0.5 hover:scale-105 hover:shadow-lg"
               >
                 View live simulation
               </a>
               <a
-                href="#"
+                href="/statement"
                 className="inline-flex h-12 items-center rounded-full border border-white/40 px-8 text-base font-medium text-white transition duration-300 hover:-translate-y-0.5 hover:bg-white/10"
               >
                 Read the monthly statement

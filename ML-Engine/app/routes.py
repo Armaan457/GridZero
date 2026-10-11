@@ -1,4 +1,5 @@
 from __future__ import annotations
+import math
 import os
 import sys
 from datetime import datetime, timedelta
@@ -75,6 +76,7 @@ from app.models import (
     WeatherShockSenseRequest,
     WeatherShockAdvisoryRequest,
     TrainingRequest,
+    SlotPredictRequest,
 )
 
 router = APIRouter()
@@ -130,6 +132,7 @@ def root_info():
         "endpoints": [
             "GET  /health",
             "GET  /nodes",
+            "POST /predict",
             "POST /forecast/node",
             "POST /forecast/explain",
             "POST /forecast/explain-grid",
@@ -163,6 +166,58 @@ def get_microgrid_nodes():
         "total_nodes": len(sim.nodes),
         "nodes": sim.nodes,
     }
+
+
+def _weather_for_hour(hour: int) -> dict:
+    """Diurnal proxy so a single simulation slot has the columns the forecaster expects."""
+    if 6 <= hour <= 18:
+        solar_frac = math.sin(math.pi * (hour - 6) / 12.0)
+    else:
+        solar_frac = 0.0
+    ghi = 950.0 * solar_frac
+    return {
+        "temperature_c": 26.0 + 6.0 * math.sin(math.pi * (hour - 6) / 18.0),
+        "ghi_w_m2": ghi,
+        "dni_w_m2": ghi * 0.85,
+        "dhi_w_m2": ghi * 0.18,
+        "cloud_cover_pct": 20.0,
+        "humidity_pct": 55.0,
+    }
+
+
+@router.post("/predict", tags=["Forecasting"])
+def predict_slot(payload: SlotPredictRequest):
+    """Contract used by the simulation engine (FORECAST_URL)."""
+    _, forecaster, _, _ = get_components()
+    appliances = payload.appliances or []
+    ac_units = sum(1 for a in appliances if str(a).lower() == "ac")
+    has_ev = int(any(str(a).lower() == "ev" for a in appliances))
+    weather = _weather_for_hour(payload.hour)
+    when = pd.Timestamp("2024-03-04") + pd.Timedelta(days=int(payload.day), hours=int(payload.hour))
+    recent_load = float(payload.base_kw)
+    recent_solar = float(payload.panel_kw) * (weather["ghi_w_m2"] / 1000.0) * 0.82
+
+    df_row = pd.DataFrame([{
+        "datetime": when,
+        "node_id": payload.node_id,
+        "temperature_c": weather["temperature_c"],
+        "ghi_w_m2": weather["ghi_w_m2"],
+        "dni_w_m2": weather["dni_w_m2"],
+        "dhi_w_m2": weather["dhi_w_m2"],
+        "cloud_cover_pct": weather["cloud_cover_pct"],
+        "humidity_pct": weather["humidity_pct"],
+        "solar_capacity_kw": float(payload.panel_kw),
+        "household_size": int(payload.household_size or 3),
+        "ac_units": ac_units,
+        "has_ev": has_ev,
+        "actual_load_kwh": recent_load,
+        "actual_solar_kwh": recent_solar,
+    }])
+
+    preds = forecaster.predict(df_row).iloc[0]
+    pred_load = max(0.0, float(preds["pred_load"]))
+    pred_solar = max(0.0, float(preds["pred_solar"])) if payload.panel_kw > 0 else 0.0
+    return {"pred_load": round(pred_load, 4), "pred_solar": round(pred_solar, 4)}
 
 
 @router.post("/forecast/node", response_model=SingleNodeForecastResponse, tags=["Forecasting"])

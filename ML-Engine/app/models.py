@@ -101,6 +101,16 @@ class WeatherShockAdvisoryRequest(BaseModel):
     shock_type: Optional[str] = Field("Monsoonal Cloudburst", example="Monsoonal Cloudburst")
 
 
+class SlotPredictRequest(BaseModel):
+    node_id: str = Field(..., example="B")
+    hour: int = Field(..., ge=0, le=23, example=14)
+    day: int = Field(0, example=0)
+    panel_kw: float = Field(0.0, example=0.0)
+    base_kw: float = Field(1.0, example=1.4)
+    household_size: Optional[int] = Field(4, example=5)
+    appliances: Optional[list[str]] = Field(default_factory=list)
+
+
 class TrainingRequest(BaseModel):
     start_date: str = Field("2024-01-01", example="2024-01-01")
     end_date: str = Field("2024-02-28", example="2024-02-28")
