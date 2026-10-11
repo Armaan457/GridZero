@@ -19,21 +19,32 @@ class EnergyExplainer:
     def __init__(self, forecaster: QuantileEnergyForecaster):
         self.forecaster = forecaster
         self.feature_cols = forecaster.feature_cols
+        if not self.forecaster.load_models or not self.forecaster.solar_models:
+            try:
+                self.forecaster.load()
+            except Exception:
+                pass
         self.load_booster = forecaster.load_models.get(0.50)
         self.solar_booster = forecaster.solar_models.get(0.50)
         self._load_explainer: Optional[shap.TreeExplainer] = None
         self._solar_explainer: Optional[shap.TreeExplainer] = None
 
     @property
-    def load_explainer(self) -> shap.TreeExplainer:
-        if self._load_explainer is None and self.load_booster is not None:
-            self._load_explainer = shap.TreeExplainer(self.load_booster)
+    def load_explainer(self) -> Optional[shap.TreeExplainer]:
+        if self._load_explainer is None:
+            if self.load_booster is None and self.forecaster.load_models:
+                self.load_booster = self.forecaster.load_models.get(0.50)
+            if self.load_booster is not None:
+                self._load_explainer = shap.TreeExplainer(self.load_booster)
         return self._load_explainer
 
     @property
-    def solar_explainer(self) -> shap.TreeExplainer:
-        if self._solar_explainer is None and self.solar_booster is not None:
-            self._solar_explainer = shap.TreeExplainer(self.solar_booster)
+    def solar_explainer(self) -> Optional[shap.TreeExplainer]:
+        if self._solar_explainer is None:
+            if self.solar_booster is None and self.forecaster.solar_models:
+                self.solar_booster = self.forecaster.solar_models.get(0.50)
+            if self.solar_booster is not None:
+                self._solar_explainer = shap.TreeExplainer(self.solar_booster)
         return self._solar_explainer
 
     def get_feature_importances(self) -> pd.DataFrame:
@@ -53,6 +64,8 @@ class EnergyExplainer:
         slot_features: pd.DataFrame,
         top_k: int = 4,
     ) -> Dict[str, Any]:
+        if not all(c in slot_features.columns for c in self.feature_cols):
+            slot_features = self.forecaster.feature_engineer.transform(slot_features)
         X = slot_features[self.feature_cols]
 
         explanation: Dict[str, Any] = {"load_drivers": [], "solar_drivers": []}

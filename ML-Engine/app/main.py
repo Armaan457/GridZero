@@ -8,6 +8,8 @@ ROOT_DIR = Path(__file__).resolve().parents[1]
 if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
+import aws.env_loader
+
 from app.routes import router
 
 app = FastAPI(

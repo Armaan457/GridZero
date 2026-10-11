@@ -6,3 +6,4 @@ data/cache/
 models/saved/
 .DS_Store
 Agents.md
+.env

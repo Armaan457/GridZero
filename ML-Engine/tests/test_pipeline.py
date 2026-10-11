@@ -144,6 +144,35 @@ class TestP2PESPipeline(unittest.TestCase):
         self.assertIn("solar_kwh", data)
         self.assertIn("net_surplus_or_need_kwh", data)
 
+    def test_09_shap_explainability_and_agent(self):
+        from fastapi.testclient import TestClient
+        from app.main import app
+        client = TestClient(app)
+
+        res_explain = client.post("/forecast/explain", json={
+            "node_id": "node_01",
+            "datetime_str": "2024-03-05 14:00:00",
+            "temperature_c": 31.0,
+            "ghi_w_m2": 820.0,
+            "solar_capacity_kw": 5.0,
+            "top_k": 3,
+        })
+        self.assertEqual(res_explain.status_code, 200)
+        data = res_explain.json()
+        self.assertIn("shap_drivers", data)
+        self.assertIn("ai_explanation", data)
+        self.assertTrue(len(data["shap_drivers"]["solar_drivers"]) > 0)
+
+        res_adv = client.post("/agent/advisory", json={
+            "node_id": "node_01",
+            "date": "2024-03-05",
+            "include_shap": True,
+        })
+        self.assertEqual(res_adv.status_code, 200)
+        adv_data = res_adv.json()
+        self.assertIn("advisory", adv_data)
+        self.assertIn("shap_drivers", adv_data)
+
 
 if __name__ == "__main__":
     unittest.main()

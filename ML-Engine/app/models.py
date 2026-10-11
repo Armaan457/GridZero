@@ -65,6 +65,25 @@ class AdvisoryRequest(BaseModel):
     estimated_earnings_inr: Optional[float] = Field(19.95, example=19.95)
     grid_comparison_inr: Optional[float] = Field(9.31, example=9.31)
     weather_summary: Optional[str] = Field("Clear sunny skies", example="Clear sunny skies")
+    include_shap: Optional[bool] = Field(False, example=False)
+
+
+class ShapExplainRequest(BaseModel):
+    node_id: str = Field("node_01", example="node_01")
+    datetime_str: str = Field("2024-03-05 14:00:00", example="2024-03-05 14:00:00")
+    temperature_c: float = Field(31.0, example=31.0)
+    ghi_w_m2: float = Field(820.0, example=820.0)
+    dni_w_m2: float = Field(780.0, example=780.0)
+    dhi_w_m2: float = Field(150.0, example=150.0)
+    cloud_cover_pct: float = Field(12.0, example=12.0)
+    humidity_pct: float = Field(45.0, example=45.0)
+    solar_capacity_kw: Optional[float] = Field(None, example=5.0)
+    household_size: Optional[int] = Field(None, example=3)
+    ac_units: Optional[int] = Field(None, example=1)
+    has_ev: Optional[int] = Field(None, example=0)
+    recent_actual_load_kwh: Optional[float] = Field(0.85, example=0.85)
+    recent_actual_solar_kwh: Optional[float] = Field(3.90, example=3.90)
+    top_k: int = Field(3, example=3)
 
 
 class WeatherShockAdvisoryRequest(BaseModel):

@@ -14,6 +14,7 @@ if str(ROOT_DIR) not in sys.path:
 from data.generators.weather_fetcher import CITY_COORDINATES
 from data.generators.indian_load_profile import IndianMicrogridSimulator
 from models.lgbm_forecaster import QuantileEnergyForecaster
+from models.explainability import EnergyExplainer
 from market.p2p_clearing import MicrogridP2PClearingEngine
 from aws.bedrock_agent import BedrockEnergyAgent
 from app.models import (
@@ -23,6 +24,7 @@ from app.models import (
     HorizonForecastRequest,
     MarketClearRequest,
     AdvisoryRequest,
+    ShapExplainRequest,
     WeatherShockAdvisoryRequest,
     TrainingRequest,
 )
@@ -33,6 +35,15 @@ _SIMULATOR: Optional[IndianMicrogridSimulator] = None
 _FORECASTER: Optional[QuantileEnergyForecaster] = None
 _CLEARING_ENGINE: Optional[MicrogridP2PClearingEngine] = None
 _BEDROCK_AGENT: Optional[BedrockEnergyAgent] = None
+_EXPLAINER: Optional[EnergyExplainer] = None
+
+
+def get_explainer() -> EnergyExplainer:
+    global _EXPLAINER
+    if _EXPLAINER is None:
+        _, forecaster, _, _ = get_components()
+        _EXPLAINER = EnergyExplainer(forecaster)
+    return _EXPLAINER
 
 
 def get_components():
@@ -72,6 +83,7 @@ def root_info():
             "GET  /health",
             "GET  /nodes",
             "POST /forecast/node",
+            "POST /forecast/explain",
             "POST /forecast/microgrid",
             "POST /market/clear",
             "POST /agent/advisory",
@@ -155,6 +167,58 @@ def forecast_single_node(payload: SingleNodeForecastRequest):
         ),
         confidence_spread_kwh=float(preds["confidence_spread"]),
     )
+
+
+@router.post("/forecast/explain", tags=["Explainability"])
+def explain_forecast_slot(payload: ShapExplainRequest):
+    sim, forecaster, _, agent = get_components()
+    explainer = get_explainer()
+
+    node_meta = next((n for n in sim.nodes if n["id"] == payload.node_id), None)
+    solar_kw = payload.solar_capacity_kw if payload.solar_capacity_kw is not None else (node_meta.get("solar_capacity_kw", 0.0) if node_meta else 0.0)
+    hh_size = payload.household_size if payload.household_size is not None else (node_meta.get("household_size", 3) if node_meta else 3)
+    ac_units = payload.ac_units if payload.ac_units is not None else (node_meta.get("appliances", {}).get("ac_units", 0) if node_meta else 0)
+    has_ev = payload.has_ev if payload.has_ev is not None else (int(node_meta.get("appliances", {}).get("has_ev", False)) if node_meta else 0)
+
+    df_row = pd.DataFrame([{
+        "datetime": pd.to_datetime(payload.datetime_str),
+        "node_id": payload.node_id,
+        "temperature_c": payload.temperature_c,
+        "ghi_w_m2": payload.ghi_w_m2,
+        "dni_w_m2": payload.dni_w_m2,
+        "dhi_w_m2": payload.dhi_w_m2,
+        "cloud_cover_pct": payload.cloud_cover_pct,
+        "humidity_pct": payload.humidity_pct,
+        "solar_capacity_kw": solar_kw,
+        "household_size": hh_size,
+        "ac_units": ac_units,
+        "has_ev": has_ev,
+        "actual_load_kwh": payload.recent_actual_load_kwh,
+        "actual_solar_kwh": payload.recent_actual_solar_kwh,
+    }])
+
+    preds = forecaster.predict(df_row).iloc[0]
+    surplus = float(preds["pred_surplus_or_need"])
+    node_name = node_meta["name"] if node_meta else payload.node_id
+
+    shap_result = explainer.explain_slot(df_row, top_k=payload.top_k)
+    ai_explanation = agent.generate_shap_explanation(
+        node_name=node_name,
+        shap_explanation=shap_result,
+        surplus_kwh=surplus,
+        slot_time=payload.datetime_str,
+    )
+
+    return {
+        "node_id": payload.node_id,
+        "node_name": node_name,
+        "datetime": str(preds["datetime"]),
+        "predicted_load_kwh": float(preds["pred_load"]),
+        "predicted_solar_kwh": float(preds["pred_solar"]),
+        "predicted_surplus_kwh": surplus,
+        "shap_drivers": shap_result,
+        "ai_explanation": ai_explanation,
+    }
 
 
 @router.post("/forecast/microgrid", tags=["Forecasting"])
@@ -281,6 +345,27 @@ def get_agent_advisory(req: AdvisoryRequest):
     node_name = node_meta["name"] if node_meta else req.node_id
     node_type = node_meta["type"] if node_meta else "microgrid_node"
 
+    shap_data = None
+    if req.include_shap:
+        explainer = get_explainer()
+        node_df = pd.DataFrame([{
+            "datetime": pd.to_datetime(f"{req.date} 14:00:00"),
+            "node_id": req.node_id,
+            "temperature_c": 31.0,
+            "ghi_w_m2": 820.0,
+            "dni_w_m2": 780.0,
+            "dhi_w_m2": 150.0,
+            "cloud_cover_pct": 15.0,
+            "humidity_pct": 45.0,
+            "solar_capacity_kw": node_meta.get("solar_capacity_kw", 0.0) if node_meta else 0.0,
+            "household_size": node_meta.get("household_size", 3) if node_meta else 3,
+            "ac_units": node_meta.get("appliances", {}).get("ac_units", 0) if node_meta else 0,
+            "has_ev": int(node_meta.get("appliances", {}).get("has_ev", False)) if node_meta else 0,
+            "actual_load_kwh": 0.85,
+            "actual_solar_kwh": 3.90,
+        }])
+        shap_data = explainer.explain_slot(node_df, top_k=3)
+
     msg = agent.generate_advisory(
         node_name=node_name,
         node_type=node_type,
@@ -292,12 +377,16 @@ def get_agent_advisory(req: AdvisoryRequest):
         estimated_earnings_inr=req.estimated_earnings_inr,
         grid_comparison_inr=req.grid_comparison_inr,
         weather_summary=req.weather_summary,
+        shap_explanation=shap_data,
     )
-    return {
+    res = {
         "node_id": req.node_id,
         "node_name": node_name,
         "advisory": msg,
     }
+    if req.include_shap and shap_data:
+        res["shap_drivers"] = shap_data
+    return res
 
 
 @router.post("/agent/weather-shock", tags=["GenAI Agent"])
