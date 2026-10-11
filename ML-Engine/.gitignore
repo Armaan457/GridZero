@@ -1,0 +1,8 @@
+env
+.venv
+__pycache__/
+*.pyc
+data/cache/
+models/saved/
+.DS_Store
+Agents.md

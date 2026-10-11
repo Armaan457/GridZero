@@ -1,0 +1,97 @@
+microgrid_id: "mg_bengaluru_east_01"
+grid_reference_rates:
+  grid_import_inr_per_kwh: 8.20
+  grid_export_inr_per_kwh: 2.45
+  p2p_base_price_inr_per_kwh: 5.30
+
+nodes:
+  - id: "node_01"
+    name: "Aarav Sharma (Solar Champion)"
+    type: "residential_prosumer"
+    household_size: 3
+    city: "Bengaluru"
+    solar_capacity_kw: 5.0
+    battery_capacity_kwh: 0.0
+    appliances:
+      base_fridge_led_kw: 0.28
+      ac_units: 1
+      ac_power_kw: 1.5
+      geyser_power_kw: 2.0
+      has_ev: false
+    behavior:
+      ac_temp_threshold_c: 30.0
+      ac_hours: [[14, 16], [23, 4]]
+      geyser_hours: [[7, 8]]
+
+  - id: "node_02"
+    name: "Vikram Mehta (Heavy Residential)"
+    type: "residential_consumer"
+    household_size: 5
+    city: "Bengaluru"
+    solar_capacity_kw: 0.0
+    battery_capacity_kwh: 0.0
+    appliances:
+      base_fridge_led_kw: 0.45
+      ac_units: 2
+      ac_power_kw: 3.0
+      geyser_power_kw: 2.2
+      has_ev: false
+    behavior:
+      ac_temp_threshold_c: 28.0
+      ac_hours: [[13, 17], [22, 6]]
+      geyser_hours: [[6, 9]]
+
+  - id: "node_03"
+    name: "Iyengar Bakery & Stores"
+    type: "commercial_consumer"
+    household_size: 0
+    city: "Bengaluru"
+    solar_capacity_kw: 1.0
+    battery_capacity_kwh: 0.0
+    appliances:
+      base_fridge_led_kw: 1.20
+      commercial_ovens_kw: 2.5
+      ac_units: 1
+      ac_power_kw: 1.8
+      geyser_power_kw: 0.0
+      has_ev: false
+    behavior:
+      operating_hours: [7, 21]
+      peak_baking_hours: [[8, 11], [15, 18]]
+
+  - id: "node_04"
+    name: "Priya Nair (EV Prosumer)"
+    type: "flexible_prosumer"
+    household_size: 3
+    city: "Bengaluru"
+    solar_capacity_kw: 3.5
+    battery_capacity_kwh: 5.0
+    battery_max_discharge_kw: 2.0
+    appliances:
+      base_fridge_led_kw: 0.32
+      ac_units: 1
+      ac_power_kw: 1.4
+      geyser_power_kw: 2.0
+      has_ev: true
+      ev_charger_kw: 3.3
+    behavior:
+      ac_temp_threshold_c: 29.5
+      ac_hours: [[14, 16], [23, 5]]
+      geyser_hours: [[7, 8]]
+      ev_charging_target_hours: [[11, 14], [1, 5]]
+
+  - id: "node_05"
+    name: "Kulkarni Residence (Frugal Senior)"
+    type: "residential_prosumer"
+    household_size: 2
+    city: "Bengaluru"
+    solar_capacity_kw: 1.5
+    battery_capacity_kwh: 0.0
+    appliances:
+      base_fridge_led_kw: 0.18
+      ac_units: 0
+      ac_power_kw: 0.0
+      geyser_power_kw: 1.5
+      has_ev: false
+    behavior:
+      geyser_hours: [[6, 7]]
