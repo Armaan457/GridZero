@@ -6,7 +6,6 @@ from pathlib import Path
 from typing import Dict, Any, Optional
 import boto3
 from botocore.exceptions import BotoCoreError, ClientError
-import pandas as pd
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
 if str(ROOT_DIR) not in sys.path:
@@ -14,13 +13,12 @@ if str(ROOT_DIR) not in sys.path:
 
 import aws.env_loader
 
-# Friendly descriptions for SHAP features in human readable explanations
 FEATURE_LABEL_MAP: Dict[str, str] = {
     "temperature_c": "ambient temperature",
-    "temp_over_30": "extreme heat above 30°C",
+    "temp_over_30": "extreme heat above 30C",
     "cooling_degree_hour": "cooling heat index",
-    "ghi_w_m2": "global solar irradiance (GHI)",
-    "dni_w_m2": "direct sunlight (DNI)",
+    "ghi_w_m2": "global solar irradiance",
+    "dni_w_m2": "direct sunlight",
     "dhi_w_m2": "diffuse solar radiation",
     "cloud_cover_pct": "cloud cover",
     "humidity_pct": "relative humidity",
@@ -28,12 +26,23 @@ FEATURE_LABEL_MAP: Dict[str, str] = {
     "household_size": "household occupancy",
     "ac_units": "air conditioning load",
     "has_ev": "EV charger presence",
-    "load_lag_24h": "yesterday's consumption at this hour",
-    "load_lag_168h": "last week's consumption at this hour",
+    "load_lag_24h": "yesterdays consumption at this hour",
+    "load_lag_168h": "last weeks consumption at this hour",
     "load_rolling_mean_3h": "recent 3-hour load trend",
-    "solar_lag_24h": "yesterday's solar output at this hour",
+    "solar_lag_24h": "yesterdays solar output at this hour",
     "solar_potential_theoretical": "clear-sky theoretical solar potential",
 }
+
+ACTIVE_CANDIDATE_MODELS = [
+    "amazon.titan-text-express-v1",
+    "us.amazon.nova-lite-v1:0",
+    "amazon.nova-lite-v1:0",
+    "us.anthropic.claude-3-haiku-20240307-v1:0",
+    "anthropic.claude-3-haiku-20240307-v1:0",
+    "amazon.titan-text-premier-v1:0",
+    "us.meta.llama3-8b-instruct-v1:0",
+    "meta.llama3-8b-instruct-v1:0",
+]
 
 
 class BedrockEnergyAgent:
@@ -43,8 +52,8 @@ class BedrockEnergyAgent:
         model_id: Optional[str] = None,
         region_name: Optional[str] = None,
     ):
-        # Default to Amazon Titan Text Lite (cheapest AWS Bedrock model, ~80% cheaper than Claude Haiku)
-        self.model_id = model_id or os.environ.get("BEDROCK_MODEL_ID", "amazon.titan-text-lite-v1")
+        self.model_id = model_id or os.environ.get("BEDROCK_MODEL_ID")
+        self.active_model_id: str = self.model_id or ACTIVE_CANDIDATE_MODELS[0]
         self.region_name = (
             region_name
             or os.environ.get("AWS_DEFAULT_REGION")
@@ -52,10 +61,15 @@ class BedrockEnergyAgent:
             or "us-east-1"
         )
         self.bedrock_client = None
+        self.last_invocation_source: str = "offline_fallback"
+        self.last_error: Optional[str] = None
 
         try:
             client_kwargs = {"region_name": self.region_name}
-            if os.environ.get("AWS_ACCESS_KEY_ID") and os.environ.get("AWS_SECRET_ACCESS_KEY"):
+            bearer_token = os.environ.get("AWS_BEARER_TOKEN_BEDROCK")
+            if bearer_token and bearer_token.strip():
+                os.environ["AWS_BEARER_TOKEN_BEDROCK"] = bearer_token.strip()
+            elif os.environ.get("AWS_ACCESS_KEY_ID") and os.environ.get("AWS_SECRET_ACCESS_KEY"):
                 client_kwargs["aws_access_key_id"] = os.environ["AWS_ACCESS_KEY_ID"]
                 client_kwargs["aws_secret_access_key"] = os.environ["AWS_SECRET_ACCESS_KEY"]
                 if os.environ.get("AWS_SESSION_TOKEN"):
@@ -65,64 +79,105 @@ class BedrockEnergyAgent:
                 "bedrock-runtime",
                 **client_kwargs,
             )
-        except Exception:
+        except Exception as e:
             self.bedrock_client = None
+            self.last_error = f"ClientInitError: {e}"
+
+    def _invoke_via_converse(self, model_id: str, prompt: str, max_tokens: int) -> Optional[str]:
+        messages = [{"role": "user", "content": [{"text": prompt}]}]
+        inference_config = {"maxTokens": max_tokens, "temperature": 0.3}
+        response = self.bedrock_client.converse(
+            modelId=model_id,
+            messages=messages,
+            inferenceConfig=inference_config,
+        )
+        output_content = response.get("output", {}).get("message", {}).get("content", [])
+        if output_content and "text" in output_content[0]:
+            return output_content[0]["text"].strip()
+        return None
+
+    def _invoke_via_invoke_model(self, model_id: str, prompt: str, max_tokens: int) -> Optional[str]:
+        if "claude" in model_id:
+            body = json.dumps({
+                "anthropic_version": "bedrock-2023-05-31",
+                "max_tokens": max_tokens,
+                "temperature": 0.3,
+                "messages": [{"role": "user", "content": prompt}],
+            })
+            resp = self.bedrock_client.invoke_model(modelId=model_id, body=body)
+            res_json = json.loads(resp["body"].read())
+            return res_json["content"][0]["text"].strip()
+        elif "titan" in model_id:
+            body = json.dumps({
+                "inputText": prompt,
+                "textGenerationConfig": {"maxTokenCount": max_tokens, "temperature": 0.3},
+            })
+            resp = self.bedrock_client.invoke_model(modelId=model_id, body=body)
+            res_json = json.loads(resp["body"].read())
+            return res_json.get("results", [{}])[0].get("outputText", "").strip()
+        elif "nova" in model_id:
+            body = json.dumps({
+                "messages": [{"role": "user", "content": [{"text": prompt}]}],
+                "inferenceConfig": {"max_new_tokens": max_tokens, "temperature": 0.3},
+            })
+            resp = self.bedrock_client.invoke_model(modelId=model_id, body=body)
+            res_json = json.loads(resp["body"].read())
+            output = res_json.get("output", {}).get("message", {}).get("content", [])
+            if output and "text" in output[0]:
+                return output[0]["text"].strip()
+        elif "llama" in model_id:
+            body = json.dumps({
+                "prompt": prompt,
+                "max_gen_len": max_tokens,
+                "temperature": 0.3,
+            })
+            resp = self.bedrock_client.invoke_model(modelId=model_id, body=body)
+            res_json = json.loads(resp["body"].read())
+            return res_json.get("generation", "").strip()
+        return None
 
     def _invoke_llm(self, prompt: str, max_tokens: int = 220) -> Optional[str]:
-        """Invokes AWS Bedrock with payload adaptation for Titan, Claude, or Llama."""
         if self.bedrock_client is None:
+            self.last_invocation_source = "offline_fallback"
+            if not self.last_error:
+                self.last_error = "AWS Bedrock client not initialized (verify credentials in .env)"
             return None
 
-        try:
-            if "amazon.titan" in self.model_id:
-                body = json.dumps({
-                    "inputText": prompt,
-                    "textGenerationConfig": {
-                        "maxTokenCount": max_tokens,
-                        "temperature": 0.3,
-                        "topP": 0.9,
-                    },
-                })
-                response = self.bedrock_client.invoke_model(
-                    modelId=self.model_id,
-                    body=body,
-                )
-                res_json = json.loads(response["body"].read())
-                results = res_json.get("results", [])
-                if results and "outputText" in results[0]:
-                    return results[0]["outputText"].strip()
+        models_to_try = []
+        if self.model_id:
+            models_to_try.append(self.model_id)
+        for m in ACTIVE_CANDIDATE_MODELS:
+            if m not in models_to_try:
+                models_to_try.append(m)
 
-            elif "anthropic.claude" in self.model_id:
-                body = json.dumps({
-                    "anthropic_version": "bedrock-2023-05-31",
-                    "max_tokens": max_tokens,
-                    "temperature": 0.3,
-                    "messages": [{"role": "user", "content": prompt}],
-                })
-                response = self.bedrock_client.invoke_model(
-                    modelId=self.model_id,
-                    body=body,
-                )
-                res_json = json.loads(response["body"].read())
-                return res_json["content"][0]["text"].strip()
+        last_error_msg = None
+        for candidate in models_to_try:
+            try:
+                res = self._invoke_via_converse(candidate, prompt, max_tokens)
+                if res:
+                    self.active_model_id = candidate
+                    self.last_invocation_source = "aws_bedrock"
+                    self.last_error = None
+                    return res
+            except Exception as e1:
+                last_error_msg = f"{type(e1).__name__}: {str(e1)}"
 
-            elif "meta.llama" in self.model_id:
-                body = json.dumps({
-                    "prompt": prompt,
-                    "max_gen_len": max_tokens,
-                    "temperature": 0.3,
-                    "top_p": 0.9,
-                })
-                response = self.bedrock_client.invoke_model(
-                    modelId=self.model_id,
-                    body=body,
-                )
-                res_json = json.loads(response["body"].read())
-                return res_json.get("generation", "").strip()
+            try:
+                res_alt = self._invoke_via_invoke_model(candidate, prompt, max_tokens)
+                if res_alt:
+                    self.active_model_id = candidate
+                    self.last_invocation_source = "aws_bedrock"
+                    self.last_error = None
+                    return res_alt
+            except Exception as e2:
+                last_error_msg = f"{type(e2).__name__}: {str(e2)}"
+                continue
 
-        except (BotoCoreError, ClientError, Exception):
-            pass
-
+        if last_error_msg and "Operation not allowed" in last_error_msg:
+            self.last_error = f"{last_error_msg} -> First-time serverless model invocation pending or AWS account verification hold active"
+        else:
+            self.last_error = last_error_msg or "All candidate models failed or un-granted"
+        self.last_invocation_source = "offline_fallback"
         return None
 
     def generate_advisory(
@@ -152,34 +207,33 @@ class BedrockEnergyAgent:
             f"(Confidence Band: {p10_surplus:.1f} to {p90_surplus:.1f} kWh).\n"
             f"- Weather: {weather_summary}.\n"
             f"- P2P Matching: Matched with {matched_peer}.\n"
-            f"- Economics: Earning/saving ₹{estimated_earnings_inr:.2f} locally vs ₹{grid_comparison_inr:.2f} via standard DISCOM grid.{shap_context}\n"
-            f"Keep it punchy, motivating, and actionable. Include relevant emojis."
+            f"- Economics: Earning/saving INR {estimated_earnings_inr:.2f} locally vs INR {grid_comparison_inr:.2f} via standard DISCOM grid.{shap_context}\n"
+            f"Keep it punchy, professional, and actionable. Do not use any emojis."
         )
 
         llm_reply = self._invoke_llm(prompt, max_tokens=220)
         if llm_reply:
             return llm_reply
 
-        # Deterministic offline rule-based fallback
         if peak_surplus_kwh > 0.5:
             base = (
-                f"☀️ Solar Surplus Alert for {node_name}: "
+                f"[Solar Surplus Notice] {node_name}: "
                 f"You will likely have a {peak_surplus_kwh:.1f} kWh surplus around {peak_surplus_slot} "
-                f"(confidence: {p10_surplus:.1f}–{p90_surplus:.1f} kWh). "
-                f"We have pre-matched your excess with {matched_peer} at ₹5.30/kWh, "
-                f"earning you ₹{estimated_earnings_inr:.2f} (vs only ₹{grid_comparison_inr:.2f} from DISCOM net-metering)."
+                f"(confidence: {p10_surplus:.1f}-{p90_surplus:.1f} kWh). "
+                f"We have pre-matched your excess with {matched_peer} at INR 5.30/kWh, "
+                f"earning you INR {estimated_earnings_inr:.2f} (vs only INR {grid_comparison_inr:.2f} from DISCOM net-metering)."
             )
         elif peak_surplus_kwh < -0.5:
             need = abs(peak_surplus_kwh)
             base = (
-                f"⚡ Demand Peak Notice for {node_name}: "
+                f"[Demand Peak Notice] {node_name}: "
                 f"Your high AC / appliance load requires {need:.1f} kWh around {peak_surplus_slot}. "
-                f"We have scheduled peer power delivery from {matched_peer} at ₹5.30/kWh, "
-                f"saving you ₹{estimated_earnings_inr:.2f} compared to peak DISCOM grid rates (₹8.20/kWh)."
+                f"We have scheduled peer power delivery from {matched_peer} at INR 5.30/kWh, "
+                f"saving you INR {estimated_earnings_inr:.2f} compared to peak DISCOM grid rates (INR 8.20/kWh)."
             )
         else:
             base = (
-                f"⚖️ Balanced Microgrid Status for {node_name}: "
+                f"[Balanced Status] {node_name}: "
                 f"Your production and consumption are nearly in equilibrium around {peak_surplus_slot}. "
                 f"Minimal grid dependency anticipated."
             )
@@ -211,7 +265,6 @@ class BedrockEnergyAgent:
         surplus_kwh: float,
         slot_time: str = "",
     ) -> str:
-        """Explains SHAP feature attributions in plain English for prosumers."""
         solar_drivers = shap_explanation.get("solar_drivers", [])[:3]
         load_drivers = shap_explanation.get("load_drivers", [])[:3]
 
@@ -230,15 +283,14 @@ class BedrockEnergyAgent:
             f"Explain why {node_name} has a net {'surplus' if surplus_kwh >= 0 else 'deficit'} of {abs(surplus_kwh):.1f} kWh{time_str}.\n"
             f"Solar generation drivers (SHAP impact):\n" + "\n".join(solar_lines) + "\n"
             f"Household demand drivers (SHAP impact):\n" + "\n".join(load_lines) + "\n\n"
-            f"Provide a friendly, 2-sentence plain-English explanation for the resident. "
-            f"Explain clearly what physical or appliance factors caused this (e.g. high sunlight, air conditioning due to heat, etc.)."
+            f"Provide a friendly, 2-sentence plain-English explanation for the resident without using any emojis. "
+            f"Explain clearly what physical or appliance factors caused this."
         )
 
         llm_reply = self._invoke_llm(prompt, max_tokens=180)
         if llm_reply:
             return llm_reply
 
-        # Deterministic offline rule-based explanation
         reasons = []
         if solar_drivers:
             top_s = solar_drivers[0]
@@ -260,9 +312,9 @@ class BedrockEnergyAgent:
 
         if reasons:
             joined = " and ".join(reasons)
-            return f"🔍 AI Attribution ({node_name}): Your balance is shaped because {joined}."
+            return f"[AI Attribution] ({node_name}): Your balance is shaped because {joined}."
         else:
-            return f"🔍 AI Attribution ({node_name}): Normal baseline conditions with balanced appliance and solar patterns."
+            return f"[AI Attribution] ({node_name}): Normal baseline conditions with balanced appliance and solar patterns."
 
     def generate_weather_shock_alert(
         self,
@@ -271,8 +323,8 @@ class BedrockEnergyAgent:
         affected_hours: str = "13:00–16:00",
     ) -> str:
         return (
-            f"⚠️ Microgrid Cloudburst Advisory ({affected_hours}): "
-            f"A sudden cloud surge (+{cloud_surge_pct:.0f}%) is slashing local solar generation by ~{drop_in_solar_kwh:.1f} kWh! "
+            f"[Microgrid Cloudburst Advisory] ({affected_hours}): "
+            f"A sudden cloud surge (+{cloud_surge_pct:.0f}%) is slashing local solar generation by ~{drop_in_solar_kwh:.1f} kWh. "
             f"The P2P trading engine has activated dynamic buffer dispatch: EV charging deferred until 17:00, "
             f"and battery storage nodes switched to discharge support to avoid expensive DISCOM peak grid imports."
         )
@@ -280,7 +332,6 @@ class BedrockEnergyAgent:
 
 if __name__ == "__main__":
     agent = BedrockEnergyAgent()
-    print("Testing Bedrock Advisory Agent...")
     msg = agent.generate_advisory(
         node_name="Aarav Sharma",
         node_type="Solar Champion Prosumer",
@@ -292,8 +343,8 @@ if __name__ == "__main__":
         estimated_earnings_inr=19.95,
         grid_comparison_inr=9.31,
     )
-    print("\nGenerated Prosumer Advisory:")
-    print(msg)
-
-    print("\nGenerated Weather Shock Advisory:")
-    print(agent.generate_weather_shock_alert(cloud_surge_pct=65.0, drop_in_solar_kwh=4.2))
+    print("Advisory:", msg)
+    print("Engine:", agent.last_invocation_source)
+    print("Model:", agent.active_model_id)
+    if agent.last_error:
+        print("Error:", agent.last_error)

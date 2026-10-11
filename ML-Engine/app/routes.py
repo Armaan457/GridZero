@@ -1,4 +1,5 @@
 from __future__ import annotations
+import os
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -218,6 +219,9 @@ def explain_forecast_slot(payload: ShapExplainRequest):
         "predicted_surplus_kwh": surplus,
         "shap_drivers": shap_result,
         "ai_explanation": ai_explanation,
+        "engine": agent.last_invocation_source,
+        "model_id": agent.active_model_id if agent.last_invocation_source == "aws_bedrock" else "offline_fallback",
+        "fallback_reason": agent.last_error if agent.last_invocation_source == "offline_fallback" else None,
     }
 
 
@@ -383,6 +387,9 @@ def get_agent_advisory(req: AdvisoryRequest):
         "node_id": req.node_id,
         "node_name": node_name,
         "advisory": msg,
+        "engine": agent.last_invocation_source,
+        "model_id": agent.active_model_id if agent.last_invocation_source == "aws_bedrock" else "offline_fallback",
+        "fallback_reason": agent.last_error if agent.last_invocation_source == "offline_fallback" else None,
     }
     if req.include_shap and shap_data:
         res["shap_drivers"] = shap_data
@@ -407,17 +414,20 @@ def get_weather_shock_alert(req: WeatherShockAdvisoryRequest):
 
 @router.post("/models/train", tags=["Training"])
 def trigger_training(req: TrainingRequest, background_tasks: BackgroundTasks):
-    from aws.sagemaker_train import run_training_pipeline
+    from aws.train_pipeline import run_training_pipeline
+
+    target_bucket = os.environ.get("S3_BUCKET_NAME")
 
     def train_worker():
         run_training_pipeline(
             start_date=req.start_date,
             end_date=req.end_date,
-            s3_bucket=req.s3_bucket,
+            s3_bucket=target_bucket,
         )
 
     background_tasks.add_task(train_worker)
     return {
         "message": f"Training job scheduled from {req.start_date} to {req.end_date}",
+        "s3_bucket": target_bucket,
         "status": "in_progress",
     }

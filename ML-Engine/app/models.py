@@ -95,4 +95,3 @@ class WeatherShockAdvisoryRequest(BaseModel):
 class TrainingRequest(BaseModel):
     start_date: str = Field("2024-01-01", example="2024-01-01")
     end_date: str = Field("2024-02-28", example="2024-02-28")
-    s3_bucket: Optional[str] = Field(None, example="my-p2p-models-bucket")

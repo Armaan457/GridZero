@@ -17,34 +17,33 @@ from aws.bedrock_agent import BedrockEnergyAgent
 
 
 def check_aws_identity(session: boto3.Session):
-    """Verifies caller identity and current region."""
     try:
         sts = session.client("sts")
         identity = sts.get_caller_identity()
-        print(f"✅ AWS Credentials Active:")
+        print("[OK] AWS Credentials Active:")
         print(f"   Account: {identity.get('Account')}")
         print(f"   ARN:     {identity.get('Arn')}")
         print(f"   Region:  {session.region_name or 'us-east-1'}")
+        if os.environ.get("AWS_BEARER_TOKEN_BEDROCK"):
+            print("   Bedrock: AWS_BEARER_TOKEN_BEDROCK active")
         return identity
     except (BotoCoreError, ClientError, Exception) as e:
-        print(f"⚠️  Could not authenticate with AWS STS: {e}")
-        print("   Please ensure AWS_ACCESS_KEY_ID & AWS_SECRET_ACCESS_KEY are set.")
+        print(f"[WARNING] Could not authenticate with AWS STS: {e}")
+        print("   Please ensure AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY are set.")
         return None
 
 
 def sync_artifacts_to_s3(session: boto3.Session, bucket_name: str, prefix: str = "p2p-models"):
-    """Creates/verifies S3 bucket and uploads model weights & config."""
     s3 = session.client("s3")
     region = session.region_name or "us-east-1"
 
-    print(f"\n📦 Step 1: Syncing Model Artifacts to S3 [s3://{bucket_name}/{prefix}/]...")
+    print(f"\nStep 1: Syncing Model Artifacts to S3 [s3://{bucket_name}/{prefix}/]...")
 
-    # Create bucket if it does not exist
     try:
         s3.head_bucket(Bucket=bucket_name)
         print(f"   Bucket '{bucket_name}' verified.")
     except ClientError as e:
-        error_code = e.response.get("Error", {}).get("Code")
+        error_code = str(e.response.get("Error", {}).get("Code", ""))
         if error_code in ("404", "NoSuchBucket"):
             print(f"   Bucket '{bucket_name}' not found. Creating it in {region}...")
             if region == "us-east-1":
@@ -55,10 +54,11 @@ def sync_artifacts_to_s3(session: boto3.Session, bucket_name: str, prefix: str =
                     CreateBucketConfiguration={"LocationConstraint": region},
                 )
             print(f"   Bucket '{bucket_name}' created successfully.")
+        elif error_code in ("BucketAlreadyOwnedByYou", "BucketAlreadyExists"):
+            print(f"   Bucket '{bucket_name}' already exists.")
         else:
-            print(f"   ⚠️ Bucket access check notice: {e}")
+            print(f"   [NOTICE] Bucket access check notice: {e}")
 
-    # Files to upload
     saved_dir = ROOT_DIR / "models" / "saved"
     model_tar = saved_dir / "model.tar.gz"
     model_joblib = saved_dir / "lgbm_forecaster.joblib"
@@ -74,20 +74,18 @@ def sync_artifacts_to_s3(session: boto3.Session, bucket_name: str, prefix: str =
         if local_path.exists():
             print(f"   Uploading {local_path.name} -> s3://{bucket_name}/{s3_key}...")
             s3.upload_file(str(local_path), bucket_name, s3_key)
-            print(f"   ✅ Uploaded: s3://{bucket_name}/{s3_key}")
+            print(f"   [UPLOADED] s3://{bucket_name}/{s3_key}")
         else:
-            print(f"   ⚠️ Local file not found: {local_path}")
+            print(f"   [WARNING] Local file not found: {local_path}")
 
     return f"s3://{bucket_name}/{prefix}/model.tar.gz"
 
 
-def verify_bedrock(session: boto3.Session, model_id: str = "amazon.titan-text-lite-v1"):
-    """Tests Amazon Bedrock connection and runs a sample prosumer advisory & SHAP explanation."""
-    print(f"\n🧠 Step 2: Testing Amazon Bedrock [{model_id}]...")
+def verify_bedrock(session: boto3.Session, model_id: Optional[str] = None):
     region = session.region_name or "us-east-1"
     agent = BedrockEnergyAgent(model_id=model_id, region_name=region)
+    print(f"\nStep 2: Testing Amazon Bedrock [Primary: {agent.active_model_id}]...")
 
-    # 1. Test Trade Advisory
     print("   Invoking sample prosumer advisory...")
     advisory = agent.generate_advisory(
         node_name="Aarav Sharma",
@@ -102,7 +100,6 @@ def verify_bedrock(session: boto3.Session, model_id: str = "amazon.titan-text-li
     )
     print(f"   Result: \"{advisory}\"")
 
-    # 2. Test SHAP Explanation
     print("\n   Invoking sample SHAP attribution explanation...")
     sample_shap = {
         "solar_drivers": [
@@ -121,17 +118,22 @@ def verify_bedrock(session: boto3.Session, model_id: str = "amazon.titan-text-li
         slot_time="14:00",
     )
     print(f"   Result: \"{explanation}\"")
-    print("   ✅ Amazon Bedrock integration validated.")
 
-
-def prepare_sagemaker_training(session: boto3.Session, bucket_name: str, role_arn: Optional[str] = None):
-    """Outputs SageMaker training job parameters and provides launch config."""
-    print(f"\n🚀 Step 3: SageMaker Training Configuration...")
-    print(f"   Entry point:    aws/sagemaker_train.py")
-    print(f"   Instance type:  ml.m5.large (1 instance)")
-    print(f"   Target S3 URI:  s3://{bucket_name}/p2p-models/")
-    print(f"   Local launcher: python aws/sagemaker_train.py --s3-bucket {bucket_name}")
-    print("   ✅ SageMaker pipeline ready.")
+    print(f"\n   Execution Engine: {agent.last_invocation_source.upper()}")
+    if agent.last_invocation_source == "aws_bedrock":
+        print("   Engine Status:    [LIVE] Amazon Bedrock returned live LLM inference.")
+        print(f"   Active Model:     {agent.active_model_id}")
+        if os.environ.get("AWS_BEARER_TOKEN_BEDROCK"):
+            print("   Auth Source:      AWS_BEARER_TOKEN_BEDROCK")
+    else:
+        print("   Engine Status:    [FALLBACK] Local rule-based template generation was used.")
+        if agent.last_error:
+            print(f"   Fallback Reason:  {agent.last_error}")
+        print("\n   Note: AWS Bedrock serverless models auto-enable on first invocation.")
+        print("   If 'Operation not allowed' appears on a new account:")
+        print("   1. Open AWS Console -> Amazon Bedrock -> Playgrounds -> Chat.")
+        print("   2. Select a model (Amazon Nova Lite or Titan Text Express) and run one test prompt.")
+        print("   3. If your AWS account is brand new, AWS may take up to 24-48h for account verification.")
 
 
 def main():
@@ -157,17 +159,16 @@ def main():
     default_bucket = os.environ.get("S3_BUCKET_NAME", f"p2p-energy-models-{account_id}")
 
     if identity is not None:
-        s3_model_uri = sync_artifacts_to_s3(session, bucket_name=default_bucket)
+        sync_artifacts_to_s3(session, bucket_name=default_bucket)
         verify_bedrock(session)
-        prepare_sagemaker_training(session, bucket_name=default_bucket)
-        print("\n🎉 All AI components successfully staged on AWS!")
+        print("\nAll AI components staged and verified.")
     else:
-        print("\n⚠️  AWS credentials not detected in environment.")
-        print("   To run this with your AWS account, configure credentials:")
-        print("     export AWS_ACCESS_KEY_ID='your-key'")
-        print("     export AWS_SECRET_ACCESS_KEY='your-secret'")
-        print("     export AWS_DEFAULT_REGION='us-east-1'")
-        print(f"   Then re-run: python aws/bootstrap_aws.py")
+        print("\n[WARNING] AWS credentials not detected in environment.")
+        print("   To run this with your AWS account, configure credentials in ML-Engine/.env:")
+        print("     AWS_ACCESS_KEY_ID=your-key")
+        print("     AWS_SECRET_ACCESS_KEY=your-secret")
+        print("     AWS_DEFAULT_REGION=us-east-1")
+        print("   Then re-run: python aws/bootstrap_aws.py")
 
 
 if __name__ == "__main__":

@@ -4,10 +4,6 @@ from pathlib import Path
 
 
 def load_aws_env():
-    """
-    Loads .env file from ML-Engine/.env or root repository without external dependencies.
-    Sets AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_DEFAULT_REGION, and related variables.
-    """
     candidates = [
         Path(__file__).resolve().parent.parent / ".env",
         Path(__file__).resolve().parent.parent.parent / ".env",
@@ -32,5 +28,4 @@ def load_aws_env():
                 pass
 
 
-# Automatically run on import
 load_aws_env()
