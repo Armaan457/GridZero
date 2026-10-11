@@ -24,8 +24,6 @@ def check_aws_identity(session: boto3.Session):
         print(f"   Account: {identity.get('Account')}")
         print(f"   ARN:     {identity.get('Arn')}")
         print(f"   Region:  {session.region_name or 'us-east-1'}")
-        if os.environ.get("AWS_BEARER_TOKEN_BEDROCK"):
-            print("   Bedrock: AWS_BEARER_TOKEN_BEDROCK active")
         return identity
     except (BotoCoreError, ClientError, Exception) as e:
         print(f"[WARNING] Could not authenticate with AWS STS: {e}")
@@ -123,8 +121,6 @@ def verify_bedrock(session: boto3.Session, model_id: Optional[str] = None):
     if agent.last_invocation_source == "aws_bedrock":
         print("   Engine Status:    [LIVE] Amazon Bedrock returned live LLM inference.")
         print(f"   Active Model:     {agent.active_model_id}")
-        if os.environ.get("AWS_BEARER_TOKEN_BEDROCK"):
-            print("   Auth Source:      AWS_BEARER_TOKEN_BEDROCK")
     else:
         print("   Engine Status:    [FALLBACK] Local rule-based template generation was used.")
         if agent.last_error:

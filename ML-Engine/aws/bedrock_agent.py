@@ -66,10 +66,7 @@ class BedrockEnergyAgent:
 
         try:
             client_kwargs = {"region_name": self.region_name}
-            bearer_token = os.environ.get("AWS_BEARER_TOKEN_BEDROCK")
-            if bearer_token and bearer_token.strip():
-                os.environ["AWS_BEARER_TOKEN_BEDROCK"] = bearer_token.strip()
-            elif os.environ.get("AWS_ACCESS_KEY_ID") and os.environ.get("AWS_SECRET_ACCESS_KEY"):
+            if os.environ.get("AWS_ACCESS_KEY_ID") and os.environ.get("AWS_SECRET_ACCESS_KEY"):
                 client_kwargs["aws_access_key_id"] = os.environ["AWS_ACCESS_KEY_ID"]
                 client_kwargs["aws_secret_access_key"] = os.environ["AWS_SECRET_ACCESS_KEY"]
                 if os.environ.get("AWS_SESSION_TOKEN"):
