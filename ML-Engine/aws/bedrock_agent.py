@@ -315,12 +315,27 @@ class BedrockEnergyAgent:
 
     def generate_weather_shock_alert(
         self,
-        cloud_surge_pct: float,
-        drop_in_solar_kwh: float,
+        city: str = "Bengaluru",
+        cloud_surge_pct: float = 65.0,
+        drop_in_solar_kwh: float = 4.2,
         affected_hours: str = "13:00–16:00",
+        shock_type: str = "Monsoonal Cloudburst",
     ) -> str:
+        prompt = (
+            f"You are the autonomous AI Dispatcher for an Indian Smart Microgrid in {city}.\n"
+            f"An intraday {shock_type} weather shock has been detected across the feeder for {affected_hours}.\n"
+            f"- Cloud cover surge: +{cloud_surge_pct:.0f}%\n"
+            f"- Estimated rooftop solar deficit: ~{drop_in_solar_kwh:.1f} kWh across the neighborhood\n\n"
+            f"Provide an urgent, professional, 2-3 sentence emergency dispatch notice for prosumers. "
+            f"Give specific guidance on load shifting (e.g. defer EV charging, hold back discretionary AC, switch batteries to discharge) "
+            f"to prevent expensive peak DISCOM grid pull. Do not use any emojis."
+        )
+        llm_reply = self._invoke_llm(prompt, max_tokens=180)
+        if llm_reply:
+            return llm_reply
+
         return (
-            f"[Microgrid Cloudburst Advisory] ({affected_hours}): "
+            f"[Microgrid {shock_type} Advisory] ({city} • {affected_hours}): "
             f"A sudden cloud surge (+{cloud_surge_pct:.0f}%) is slashing local solar generation by ~{drop_in_solar_kwh:.1f} kWh. "
             f"The P2P trading engine has activated dynamic buffer dispatch: EV charging deferred until 17:00, "
             f"and battery storage nodes switched to discharge support to avoid expensive DISCOM peak grid imports."

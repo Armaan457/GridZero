@@ -97,3 +97,60 @@ class EnergyExplainer:
                 })
 
         return explanation
+
+    def explain_microgrid_slot(
+        self,
+        slot_features_df: pd.DataFrame,
+        top_k: int = 4,
+    ) -> Dict[str, Any]:
+        """Calculates aggregated community-level SHAP attributions across all microgrid nodes.
+        Shapley values are mathematically additive: SHAP(Grid) = SUM(SHAP(Nodes)).
+        """
+        if not all(c in slot_features_df.columns for c in self.feature_cols):
+            slot_features_df = self.forecaster.feature_engineer.transform(slot_features_df)
+        X = slot_features_df[self.feature_cols]
+
+        explanation: Dict[str, Any] = {
+            "load_drivers": [],
+            "solar_drivers": [],
+            "net_grid_drivers": [],
+        }
+
+        val_load = np.zeros(len(self.feature_cols))
+        val_solar = np.zeros(len(self.feature_cols))
+
+        if self.load_explainer is not None:
+            shap_values_load = self.load_explainer.shap_values(X)
+            if isinstance(shap_values_load, list):
+                shap_values_load = shap_values_load[0]
+            val_load = np.sum(shap_values_load, axis=0) if len(shap_values_load.shape) > 1 else shap_values_load
+            top_load_idx = np.argsort(np.abs(val_load))[::-1][:top_k]
+            for idx in top_load_idx:
+                explanation["load_drivers"].append({
+                    "feature": self.feature_cols[idx],
+                    "mean_value": round(float(X.iloc[:, idx].mean()), 2),
+                    "shap_impact": round(float(val_load[idx]), 3),
+                })
+
+        if self.solar_explainer is not None:
+            shap_values_solar = self.solar_explainer.shap_values(X)
+            if isinstance(shap_values_solar, list):
+                shap_values_solar = shap_values_solar[0]
+            val_solar = np.sum(shap_values_solar, axis=0) if len(shap_values_solar.shape) > 1 else shap_values_solar
+            top_solar_idx = np.argsort(np.abs(val_solar))[::-1][:top_k]
+            for idx in top_solar_idx:
+                explanation["solar_drivers"].append({
+                    "feature": self.feature_cols[idx],
+                    "mean_value": round(float(X.iloc[:, idx].mean()), 2),
+                    "shap_impact": round(float(val_solar[idx]), 3),
+                })
+
+        val_net = val_solar - val_load
+        top_net_idx = np.argsort(np.abs(val_net))[::-1][:top_k]
+        for idx in top_net_idx:
+            explanation["net_grid_drivers"].append({
+                "feature": self.feature_cols[idx],
+                "shap_impact": round(float(val_net[idx]), 3),
+            })
+
+        return explanation
