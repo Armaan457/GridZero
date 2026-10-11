@@ -3,7 +3,7 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import { NODES } from "@/lib/engine";
 
-const KEY = "grove-node";
+const KEY = "gridzero-node";
 
 const NodeContext = createContext<{ node: string; setNode: (n: string) => void }>({
   node: "A",

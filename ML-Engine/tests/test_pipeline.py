@@ -14,7 +14,6 @@ from models.features import FeatureEngineer
 from models.lgbm_forecaster import QuantileEnergyForecaster
 from market.p2p_clearing import MicrogridP2PClearingEngine
 from aws.bedrock_agent import BedrockEnergyAgent
-from aws.lambda_handler import lambda_handler
 
 
 class TestP2PESPipeline(unittest.TestCase):
@@ -107,16 +106,25 @@ class TestP2PESPipeline(unittest.TestCase):
         self.assertIn("Aarav Sharma", msg)
         self.assertIn("3.5 kWh", msg)
 
-    def test_07_lambda_handler(self):
+    def test_07_predict_endpoint(self):
+        from fastapi.testclient import TestClient
+        from app.main import app
+        client = TestClient(app)
+
         payload = {
             "node_id": "node_01",
-            "datetime": "2024-03-05 14:00:00",
-            "temperature_c": 31.0,
-            "ghi_w_m2": 820.0,
-            "solar_capacity_kw": 5.0,
+            "hour": 14,
+            "day": 0,
+            "panel_kw": 5.0,
+            "base_kw": 0.85,
+            "household_size": 3,
+            "appliances": ["AC"],
         }
-        res = lambda_handler(payload)
-        self.assertEqual(res["statusCode"], 200)
+        res = client.post("/predict", json=payload)
+        self.assertEqual(res.status_code, 200)
+        data = res.json()
+        self.assertIn("pred_load", data)
+        self.assertIn("pred_solar", data)
 
     def test_08_fastapi_endpoints(self):
         from fastapi.testclient import TestClient
