@@ -17,13 +17,16 @@ export default function SiteNav({ active }: { active?: string }) {
     <nav className="pointer-events-none fixed top-5 left-1/2 z-30 w-full max-w-[min(94vw,56rem)] -translate-x-1/2 px-3">
       <div
         className="pointer-events-auto flex items-center justify-between gap-3 rounded-full px-5 py-2 shadow-[0_8px_28px_rgba(40,124,115,0.12)] ring-1 ring-white/50"
-        style={{ background: "linear-gradient(135deg, #dcebdd 0%, #c8dec9 55%, #b8d8d0 100%)" }}
+        style={{
+          background:
+            "linear-gradient(135deg, #dcebdd 0%, #c8dec9 55%, #b8d8d0 100%)",
+        }}
       >
         <a
           href="/"
           className="rounded-full px-4 py-2 font-display text-sm text-dark-teal transition duration-300 hover:bg-white/50"
         >
-          Grove Grid
+          GridZero
         </a>
         <div className="hidden items-center gap-0.5 sm:flex">
           {links.map((link) => (

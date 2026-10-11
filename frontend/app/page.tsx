@@ -37,10 +37,22 @@ const steps = [
 ];
 
 const pages = [
-  { title: "Dashboard", copy: "Hourly solar and load — actual versus predicted — and today’s surplus or need." },
-  { title: "Ledger", copy: "Grid import, solar export, P2P sold and bought. Units and rupees, clearly named." },
-  { title: "Live simulation", copy: "Play, pause, switch modes, watch arrows between homes, inject sudden demand." },
-  { title: "Compare modes", copy: "Surplus used, demand met by P2P, grid import cut, fairness — same day, three policies." },
+  {
+    title: "Dashboard",
+    copy: "Hourly solar and load — actual versus predicted — and today’s surplus or need.",
+  },
+  {
+    title: "Ledger",
+    copy: "Grid import, solar export, P2P sold and bought. Units and rupees, clearly named.",
+  },
+  {
+    title: "Live simulation",
+    copy: "Play, pause, switch modes, watch arrows between homes, inject sudden demand.",
+  },
+  {
+    title: "Compare modes",
+    copy: "Surplus used, demand met by P2P, grid import cut, fairness — same day, three policies.",
+  },
 ];
 
 export default function Home() {
@@ -49,13 +61,16 @@ export default function Home() {
       <nav className="pointer-events-none fixed top-5 left-1/2 z-30 w-full max-w-[min(94vw,56rem)] -translate-x-1/2 px-3">
         <div
           className="pointer-events-auto flex items-center justify-between gap-3 rounded-full px-5 py-2 shadow-[0_8px_28px_rgba(40,124,115,0.12)] ring-1 ring-white/50"
-          style={{ background: "linear-gradient(135deg, #dcebdd 0%, #c8dec9 55%, #b8d8d0 100%)" }}
+          style={{
+            background:
+              "linear-gradient(135deg, #dcebdd 0%, #c8dec9 55%, #b8d8d0 100%)",
+          }}
         >
           <a
             href="#top"
             className="rounded-full px-4 py-2 font-display text-sm text-dark-teal transition duration-300 hover:bg-white/50"
           >
-            Grove Grid
+            GridZero
           </a>
           <div className="hidden items-center gap-0.5 sm:flex">
             <a
@@ -103,9 +118,10 @@ export default function Home() {
                   Share rooftop sun with the house next door
                 </h1>
                 <p className="mt-6 max-w-xl text-lg leading-8 text-sage-text">
-                  Grove Grid is a virtual allocation for neighborhood solar. Your surplus
-                  goes onto the shared grid; a neighbor draws from it. We decide whose
-                  export covers whose import — fairly, locally, and in every time slot.
+                  GridZero is a virtual allocation for neighborhood solar. Your
+                  surplus goes onto the shared grid; a neighbor draws from it.
+                  We decide whose export covers whose import — fairly, locally,
+                  and in every time slot.
                 </p>
                 <div className="mt-8 flex flex-col gap-3 sm:flex-row">
                   <a
@@ -122,8 +138,8 @@ export default function Home() {
                   </a>
                 </div>
                 <p className="mt-6 text-sm text-sage-muted">
-                  Sellers earn more than a feed-in tariff. Buyers pay less than retail.
-                  The discom is paid for the wires.
+                  Sellers earn more than a feed-in tariff. Buyers pay less than
+                  retail. The discom is paid for the wires.
                 </p>
               </div>
 
@@ -132,7 +148,10 @@ export default function Home() {
           </div>
         </section>
 
-        <section id="how" className="border-t border-light-sage/80 bg-soft-off-white/40">
+        <section
+          id="how"
+          className="border-t border-light-sage/80 bg-soft-off-white/40"
+        >
           <div className="mx-auto max-w-6xl px-6 py-20">
             <h2 className="font-display text-3xl text-forest sm:text-4xl">
               From forecast to a fair dispatch
@@ -147,8 +166,12 @@ export default function Home() {
                   key={step.n}
                   className="card-lift rounded-3xl border border-light-sage bg-warm-white p-7"
                 >
-                  <span className="font-display text-sm text-teal">{step.n}</span>
-                  <h3 className="mt-3 font-display text-2xl text-dark-teal">{step.title}</h3>
+                  <span className="font-display text-sm text-teal">
+                    {step.n}
+                  </span>
+                  <h3 className="mt-3 font-display text-2xl text-dark-teal">
+                    {step.title}
+                  </h3>
                   <p className="mt-3 leading-7 text-sage-text">{step.copy}</p>
                 </article>
               ))}
@@ -162,7 +185,8 @@ export default function Home() {
           </h2>
           <p className="mt-3 max-w-2xl text-sage-text">
             Compare Static, Dynamic, and Hybrid on the same day — surplus used,
-            demand met by neighbors, grid import reduced, and Jain&apos;s fairness.
+            demand met by neighbors, grid import reduced, and Jain&apos;s
+            fairness.
           </p>
           <div className="mt-12 grid gap-6 md:grid-cols-3">
             {modes.map((mode) => (
@@ -173,7 +197,9 @@ export default function Home() {
                 <span className="rounded-full bg-teal px-3 py-1 text-xs font-medium text-white">
                   {mode.name}
                 </span>
-                <h3 className="mt-5 font-display text-2xl text-dark-teal">{mode.title}</h3>
+                <h3 className="mt-5 font-display text-2xl text-dark-teal">
+                  {mode.title}
+                </h3>
                 <p className="mt-3 leading-7 text-sage-text">{mode.copy}</p>
               </article>
             ))}
@@ -186,9 +212,9 @@ export default function Home() {
               A website that shows the living grid
             </h2>
             <p className="mt-3 max-w-2xl text-sage-text">
-              Planned schedule from forecasts. Actual settlement from meters. When
-              a home suddenly needs more, leftover surplus still finds them — or
-              the grid steps in.
+              Planned schedule from forecasts. Actual settlement from meters.
+              When a home suddenly needs more, leftover surplus still finds them
+              — or the grid steps in.
             </p>
             <div className="mt-12 grid gap-5 sm:grid-cols-2">
               {pages.map((page) => (
@@ -196,7 +222,9 @@ export default function Home() {
                   key={page.title}
                   className="card-lift rounded-2xl border border-light-sage bg-warm-white/80 px-6 py-6"
                 >
-                  <h3 className="font-display text-xl text-dark-teal">{page.title}</h3>
+                  <h3 className="font-display text-xl text-dark-teal">
+                    {page.title}
+                  </h3>
                   <p className="mt-2 text-sage-text">{page.copy}</p>
                 </article>
               ))}
@@ -219,8 +247,8 @@ export default function Home() {
             </h2>
             <p className="mx-auto mt-4 max-w-xl text-white/85">
               Restrict sharing to the same feeder. Forecast both generation and
-              load. Let the ledger speak in exported and imported kilowatt-hours —
-              then settle gently between neighbors.
+              load. Let the ledger speak in exported and imported kilowatt-hours
+              — then settle gently between neighbors.
             </p>
             <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
               <a
@@ -241,7 +269,7 @@ export default function Home() {
       </main>
 
       <footer className="border-t border-light-sage/80 px-6 py-8 text-center text-sm text-sage-muted">
-        Grove Grid · P2P energy sharing · virtual net metering, proposed with care
+        GridZero · P2P energy sharing · virtual net metering, proposed with care
       </footer>
     </div>
   );

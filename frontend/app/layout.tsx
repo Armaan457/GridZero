@@ -19,7 +19,7 @@ const fraunces = Fraunces({
 });
 
 export const metadata: Metadata = {
-  title: "Grove Grid — P2P Energy Sharing",
+  title: "GridZero — P2P Energy Sharing",
   description:
     "Share rooftop solar with neighbors on the same feeder. Forecast surplus, match locally, and settle fairly — virtual allocation on the shared grid.",
 };
