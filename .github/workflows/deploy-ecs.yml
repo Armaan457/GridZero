@@ -1,0 +1,109 @@
+
+name: Deploy ML Engine to AWS ECS
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'ML-Engine/**'
+      - '.github/workflows/deploy-ecs.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: p2p-ml-engine-deploy
+  cancel-in-progress: false
+
+env:
+  AWS_REGION: us-east-1
+  ECR_REPOSITORY: p2p-ml-engine
+  ECS_CLUSTER: p2p-cluster
+  ECS_SERVICE: p2p-ml-engine-service
+  ECS_TASK_DEFINITION: ML-Engine/aws/ecs-task-definition.json
+  CONTAINER_NAME: p2p-ml-engine
+
+jobs:
+  deploy:
+    name: Build, Push and Deploy
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Configure AWS Credentials via OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Log in to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build, tag, and push Docker image
+        id: build-image
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          docker buildx build \
+            --platform linux/amd64 \
+            --file ML-Engine/Dockerfile \
+            --tag "$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" \
+            --tag "$ECR_REGISTRY/$ECR_REPOSITORY:latest" \
+            --push \
+            ML-Engine
+
+          echo "image=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" >> "$GITHUB_OUTPUT"
+
+      - name: Inject Secrets Manager ARN
+        env:
+          SECRET_ARN: ${{ vars.FRIENDS_SECRET_ARN }}
+        run: |
+          set -euo pipefail
+
+          test -n "$SECRET_ARN" || {
+            echo "FRIENDS_SECRET_ARN repository variable is missing"
+            exit 1
+          }
+
+          jq --arg arn "$SECRET_ARN" '
+            .containerDefinitions |= map(
+              if .name == "p2p-ml-engine" then
+                .secrets |= map(
+                  .valueFrom |= sub("^FRIENDS_SECRET_ARN"; $arn)
+                )
+              else .
+              end
+            )
+          ' "$ECS_TASK_DEFINITION" > "$RUNNER_TEMP/ecs-task-definition.json"
+
+          jq -e '
+            all(
+              .containerDefinitions[]
+              | select(.name == "p2p-ml-engine")
+              | .secrets[]?;
+              (.valueFrom | startswith("arn:aws:secretsmanager:"))
+            )
+          ' "$RUNNER_TEMP/ecs-task-definition.json" > /dev/null
+
+      - name: Render Amazon ECS task definition
+        id: task-def
+        uses: aws-actions/amazon-ecs-render-task-definition@v1
+        with:
+          task-definition: ${{ runner.temp }}/ecs-task-definition.json
+          container-name: ${{ env.CONTAINER_NAME }}
+          image: ${{ steps.build-image.outputs.image }}
+
+      - name: Deploy Amazon ECS task definition
+        uses: aws-actions/amazon-ecs-deploy-task-definition@v2
+        with:
+          task-definition: ${{ steps.task-def.outputs.task-definition }}
+          service: ${{ env.ECS_SERVICE }}
+          cluster: ${{ env.ECS_CLUSTER }}
+          wait-for-service-stability: true

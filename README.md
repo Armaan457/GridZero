@@ -1,6 +1,6 @@
 # GridZero
 
-Intelligent peer-to-peer microgrid energy sharing platform that matches rooftop solar surplus with neighborhood deficit on the shared feeder in real time.
+Intelligent peer-to-peer microgrid energy sharing platform that matches rooftop solar surplus with neighborhood deficit on the shared feeder dynamically.
 
 ---
 
@@ -17,6 +17,8 @@ Traditional setups sell rooftop solar back to the utility at low feed-in tariffs
 ---
 
 ## System Architecture
+
+<div style="max-width: 300px;">
 
 ```mermaid
 flowchart TD
@@ -63,6 +65,7 @@ flowchart TD
     Allocators -->|Grid Import / Export Balance| DISCOM
     Pricing -->|P2P Rupee Settlement| Wallet
 ```
+</div>
 
 ---
 
@@ -70,7 +73,7 @@ flowchart TD
 
 | Layer | Technologies |
 |---|---|
-| **Frontend** | Next.js 16, React 19, Tailwind CSSand SWR |
+| **Frontend** | Next.js 16, React 19, Tailwind CSS and SWR |
 | **Backend** | FastAPI and Uvicorn |
 | **Storage** | Amazon S3 and SQLite |
 | **AI/ML** | LightGBM, SHAP and Amazon Bedrock |
