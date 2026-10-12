@@ -79,3 +79,4 @@ flowchart TD
 | **AI/ML** | LightGBM, SHAP and Amazon Bedrock |
 | **Data & APIs** | Open-Meteo Weather API |
 | **Simulation** | Discrete-Event Engine and Virtual Smart Meters |
+| **Containerization & Deployment** | Docker, AWS ECS Fargate and GitHub Actions |
