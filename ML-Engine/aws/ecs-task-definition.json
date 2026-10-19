@@ -1,0 +1,76 @@
+
+{
+  "family": "p2p-ml-engine",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": [
+    "FARGATE"
+  ],
+  "cpu": "1024",
+  "memory": "2048",
+  "executionRoleArn": "arn:aws:iam::667958380608:role/ecsTaskExecutionRole",
+  "taskRoleArn": "arn:aws:iam::667958380608:role/p2p-ml-engine-task-role",
+  "containerDefinitions": [
+    {
+      "name": "p2p-ml-engine",
+      "image": "667958380608.dkr.ecr.us-east-1.amazonaws.com/p2p-ml-engine:latest",
+      "essential": true,
+      "portMappings": [
+        {
+          "containerPort": 8000,
+          "hostPort": 8000,
+          "protocol": "tcp"
+        }
+      ],
+      
+      "environment": [
+        {
+          "name": "PORT",
+          "value": "8000"
+        },
+        {
+          "name": "ENV",
+          "value": "production"
+        },
+        {
+          "name": "BEDROCK_MODEL_ID",
+          "value": "amazon.nova-lite-v1:0"
+        }
+      ],
+      
+      
+      "secrets": [
+        {
+          "name": "AWS_ACCESS_KEY_ID",
+          "valueFrom": "FRIENDS_SECRET_ARN:AWS_ACCESS_KEY_ID::"
+        },
+        {
+          "name": "AWS_SECRET_ACCESS_KEY",
+          "valueFrom": "FRIENDS_SECRET_ARN:AWS_SECRET_ACCESS_KEY::"
+        },
+        {
+          "name": "AWS_DEFAULT_REGION",
+          "valueFrom": "FRIENDS_SECRET_ARN:AWS_DEFAULT_REGION::"
+        }
+      ],
+
+      "healthCheck": {
+        "command": [
+          "CMD-SHELL",
+          "curl -f http://localhost:8000/health || exit 1"
+        ],
+        "interval": 30,
+        "timeout": 5,
+        "retries": 3,
+        "startPeriod": 15
+      },
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/p2p-ml-engine",
+          "awslogs-region": "us-east-1",
+          "awslogs-stream-prefix": "ecs"
+        }
+      }
+    }
+  ]
+}
