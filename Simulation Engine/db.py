@@ -1,40 +1,24 @@
-"""db.py - tiny SQLite store so the website can query ledger / meter history (swap for DynamoDB on AWS)."""
-import sqlite3, threading
-
-_lock = threading.Lock()
-_conn = sqlite3.connect("p2p.db", check_same_thread=False)
-_conn.row_factory = sqlite3.Row
-
-SCHEMA = """
-CREATE TABLE IF NOT EXISTS ledger(day INT, hour INT, seller TEXT, buyer TEXT, kwh REAL, price REAL,
-                                  amount REAL, grid_fee REAL, mode TEXT, source TEXT);
-CREATE TABLE IF NOT EXISTS meter(day INT, hour INT, node TEXT, load REAL, solar REAL, role TEXT,
-                                 pred_load REAL, pred_solar REAL, planned_p2p REAL, p2p_bought REAL,
-                                 p2p_sold REAL, grid_import REAL, grid_export REAL, batt_charge REAL,
-                                 soc REAL, feeder TEXT);
-CREATE TABLE IF NOT EXISTS events(day INT, hour INT, text TEXT);
-CREATE INDEX IF NOT EXISTS ix_meter_node ON meter(node, day, hour);
 """
-with _lock:
-    _conn.executescript(SCHEMA)
+db.py - picks the storage backend. The rest of the code only imports `db`.
+  DB_BACKEND=sqlite    (default) local file p2p.db, no setup
+  DB_BACKEND=dynamodb  Amazon DynamoDB (see AWS_DYNAMODB_SETUP.md)
+"""
+import os
+
+BACKEND = os.environ.get("DB_BACKEND", "sqlite").lower()
+if BACKEND == "dynamodb":
+    from db_dynamo import *          # noqa: F401,F403
+else:
+    from db_sqlite import *          # noqa: F401,F403
 
 
-def insert_many(table, rows):
-    if not rows: return
-    cols = list(rows[0].keys())
-    q = f"INSERT INTO {table}({','.join(cols)}) VALUES({','.join('?' * len(cols))})"
-    with _lock:
-        _conn.executemany(q, [tuple(r[c] for c in cols) for r in rows])
-        _conn.commit()
-
-
-def query(sql, args=()):
-    with _lock:
-        return [dict(r) for r in _conn.execute(sql, args).fetchall()]
-
-
-def reset():
-    with _lock:
-        for t in ("ledger", "meter", "events"):
-            _conn.execute(f"DELETE FROM {t}")
-        _conn.commit()
+def statement_totals(node):
+    """Totals for one node, computed from its meter rows (works identically on every backend)."""
+    rows = meter_rows(node)
+    s = lambda k: sum(r.get(k, 0) or 0 for r in rows)
+    return dict(discom_import_kwh=round(s("grid_import"), 2), discom_export_kwh=round(s("grid_export"), 2),
+                p2p_sold_kwh=round(s("p2p_sold"), 2), p2p_earned_rs=round(s("p2p_earned_rs"), 2),
+                p2p_bought_kwh=round(s("p2p_bought"), 2), p2p_owed_rs=round(s("p2p_owed_rs"), 2),
+                grid_fee_on_discom_bill_rs=round(s("grid_fee_rs"), 2),
+                p2p_benefit_rs=round(s("benefit_rs"), 2), unserved_kwh=round(s("unserved"), 2),
+                total_load_kwh=round(s("load"), 2), total_solar_kwh=round(s("solar"), 2))

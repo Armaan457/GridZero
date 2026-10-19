@@ -1,0 +1,26 @@
+# docker compose up --build            -> engine on http://localhost:8000 (SQLite in a named volume)
+# Needs a .env file:  cp .env.example .env
+services:
+  engine:
+    build: .
+    image: p2p-engine:latest
+    container_name: p2p-engine
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    volumes:
+      - engine-data:/data
+    restart: unless-stopped
+
+  # Optional: a local DynamoDB for offline testing.
+  #   docker compose --profile local-dynamo up --build
+  #   then in .env:  DB_BACKEND=dynamodb  DDB_ENDPOINT=http://dynamodb-local:8000  AWS_ACCESS_KEY_ID=x  AWS_SECRET_ACCESS_KEY=x
+  dynamodb-local:
+    image: amazon/dynamodb-local
+    profiles: ["local-dynamo"]
+    ports:
+      - "8001:8000"
+
+volumes:
+  engine-data:

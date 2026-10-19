@@ -1,100 +1,226 @@
 <!DOCTYPE html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>P2P Energy Engine - Live Simulation</title>
+<title>P2P Energy Engine - Control Room</title>
 <style>
-:root{--bg:#f5f6f8;--card:#fff;--ink:#1c2230;--mute:#6b7385;--line:#e3e6ec;--sup:#1f9d55;--buy:#d9480f;--neu:#8b93a5;--acc:#2563eb;--warn:#b45309}
+:root{--bg:#f5f6f8;--card:#fff;--ink:#1c2230;--mute:#6b7385;--line:#e3e6ec;--sup:#1f9d55;--buy:#d9480f;--neu:#8b93a5;--acc:#2563eb;--warn:#b45309;--bad:#b91c1c}
 *{box-sizing:border-box}body{margin:0;font:14px/1.45 system-ui,Segoe UI,Roboto,sans-serif;background:var(--bg);color:var(--ink)}
-header{display:flex;flex-wrap:wrap;gap:12px;align-items:center;padding:12px 20px;background:var(--card);border-bottom:1px solid var(--line);position:sticky;top:0;z-index:5}
-h1{font-size:17px;margin:0 12px 0 0}.clock{font-weight:700;font-size:16px;padding:4px 10px;border:1px solid var(--line);border-radius:8px}
-button,select{font:inherit;padding:6px 12px;border:1px solid var(--line);border-radius:8px;background:#fff;cursor:pointer}
-button.primary{background:var(--acc);color:#fff;border-color:var(--acc)}button:hover{filter:brightness(.96)}
-.badge{font-size:11px;padding:2px 8px;border-radius:99px;background:#eef2ff;color:var(--acc)}
-main{padding:16px 20px;max-width:1300px;margin:auto;display:grid;gap:14px}
-.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
-.kpi{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:10px 12px}.kpi b{display:block;font-size:20px}.kpi span{color:var(--mute);font-size:12px}
+header{display:flex;flex-wrap:wrap;gap:10px;align-items:center;padding:10px 18px;background:var(--card);border-bottom:1px solid var(--line);position:sticky;top:0;z-index:5}
+h1{font-size:17px;margin:0 10px 0 0}.clock{font-weight:700;font-size:16px;padding:4px 10px;border:1px solid var(--line);border-radius:8px}
+button,select,input{font:inherit;padding:5px 10px;border:1px solid var(--line);border-radius:8px;background:#fff}
+button{cursor:pointer}button.primary{background:var(--acc);color:#fff;border-color:var(--acc)}button.danger{color:var(--bad)}button:hover{filter:brightness(.96)}
+input[type=number],input[type=text]{width:90px}input[type=range]{padding:0;width:140px}
+.badge{font-size:11px;padding:2px 8px;border-radius:99px;background:#eef2ff;color:var(--acc)}.badge.warn{background:#fff3e0;color:var(--warn)}.badge.bad{background:#fee2e2;color:var(--bad)}
+main{padding:14px 18px;max-width:1350px;margin:auto;display:grid;gap:12px}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(135px,1fr));gap:8px}
+.kpi{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:8px 10px}.kpi b{display:block;font-size:19px}.kpi span{color:var(--mute);font-size:12px}
 .card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px 14px}.card h2{font-size:14px;margin:0 0 8px}
-.grid2{display:grid;grid-template-columns:2fr 1fr;gap:14px}@media(max-width:900px){.grid2{grid-template-columns:1fr}}
-.nodes{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:10px}
+.grid2{display:grid;grid-template-columns:2fr 1fr;gap:12px}.grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px}
+@media(max-width:1000px){.grid2,.grid3{grid-template-columns:1fr}}
+.nodes{display:grid;grid-template-columns:repeat(auto-fill,minmax(205px,1fr));gap:10px}
 .node{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:10px;border-top:4px solid var(--neu)}
-.node.supplier{border-top-color:var(--sup)}.node.buyer{border-top-color:var(--buy)}
+.node.supplier{border-top-color:var(--sup)}.node.buyer{border-top-color:var(--buy)}.node.sel{outline:2px solid var(--acc)}
 .node .top{display:flex;justify-content:space-between;align-items:center;font-weight:700}
 .role{font-size:11px;font-weight:600;padding:1px 8px;border-radius:99px;color:#fff;background:var(--neu)}.supplier .role{background:var(--sup)}.buyer .role{background:var(--buy)}
 .bar{height:6px;background:#eceff4;border-radius:4px;margin:3px 0 6px;overflow:hidden}.bar i{display:block;height:100%}
 .row{display:flex;justify-content:space-between;font-size:12px;color:var(--mute)}.row b{color:var(--ink)}
-.node button{width:100%;margin-top:6px;font-size:12px;padding:4px}
+.node .btns{display:flex;gap:6px;margin-top:6px}.node .btns button{flex:1;font-size:12px;padding:3px}
 table{width:100%;border-collapse:collapse;font-size:12px}th,td{padding:4px 6px;border-bottom:1px solid var(--line);text-align:right}th:first-child,td:first-child{text-align:left}th{color:var(--mute);font-weight:600}
 .ev{padding:6px 8px;border-left:3px solid var(--warn);background:#fff8ed;margin-bottom:6px;font-size:12px;border-radius:4px}
 .flow{font-size:12px;display:flex;flex-wrap:wrap;gap:6px}.flow span{background:#eefbf3;border:1px solid #c9ecd6;border-radius:6px;padding:2px 8px}
 canvas{width:100%;height:230px}.legend{display:flex;gap:14px;font-size:12px;color:var(--mute);margin-top:4px;flex-wrap:wrap}.legend i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:4px}
-small{color:var(--mute)}
+small,.mute{color:var(--mute)}.field{display:flex;flex-direction:column;font-size:12px;color:var(--mute);gap:2px}.frow{display:flex;flex-wrap:wrap;gap:8px;align-items:flex-end;margin:6px 0}
+.pill{display:inline-block;font-size:11px;padding:1px 7px;border-radius:99px;background:#eef2ff;color:var(--acc);margin-left:4px}.pill.off{background:#eceff4;color:var(--mute)}
+#toast{position:fixed;bottom:16px;right:16px;background:#1c2230;color:#fff;padding:8px 14px;border-radius:8px;display:none;z-index:9;max-width:380px}
 </style></head><body>
 <header>
   <h1>⚡ P2P Energy Engine</h1>
   <div class="clock" id="clock">Day 0 · 00:00</div>
-  <button class="primary" id="btnRun">▶ Start</button><button id="btnStep">Step +1h</button><button id="btnReset">Reset</button>
+  <button class="primary" id="btnRun">▶ Start</button><button id="btnStep">Step +1h</button><button id="btnReset" title="Clears history and the clock; keeps your houses">Reset</button>
   <label>Speed <select id="speed"><option value="0.5">0.5 h/s</option><option value="1" selected>1 h/s</option><option value="3">3 h/s</option><option value="8">8 h/s</option></select></label>
   <label>Sharing mode <select id="mode"><option>hybrid</option><option>dynamic</option><option>static</option></select></label>
-  <span class="badge" id="fsrc">forecast: -</span>
+  <span class="badge" id="fsrc">forecast: -</span><span class="badge" id="dbb">db: -</span><span class="badge warn" id="outb" style="display:none">GRID OUTAGE</span>
 </header>
 <main>
+  <div id="err" style="display:none;background:#fee2e2;border:1px solid #fca5a5;color:#991b1b;padding:10px 14px;border-radius:8px;font-weight:600"></div>
   <div class="kpis" id="kpis"></div>
+
+  <div class="card"><h2>Scenario controls <small>(weather, grid, sudden loads)</small></h2>
+    <div class="frow">
+      <label class="field">Temperature <span id="tv">30 °C</span><input type="range" id="temp" min="5" max="48" step="1" value="30"></label>
+      <label class="field">Cloud cover <span id="cv">15 %</span><input type="range" id="cloud" min="0" max="100" step="5" value="15"></label>
+      <label class="field">Grid <button id="btnOutage">Cut grid (outage)</button></label>
+      <span class="mute">Presets:</span>
+      <button onclick="preset('clear')">☀ Clear</button><button onclick="preset('heatwave')">🔥 Heatwave</button><button onclick="preset('monsoon')">🌧 Monsoon</button><button onclick="preset('winter')">❄ Winter</button>
+    </div>
+  </div>
+
   <div class="grid2">
     <div class="card"><h2>Community supply vs demand (kWh per hour)</h2><canvas id="chart" width="900" height="230"></canvas>
       <div class="legend"><span><i style="background:#1f9d55"></i>Supply offered</span><span><i style="background:#d9480f"></i>Unmet-by-self demand</span><span><i style="background:#2563eb"></i>Matched P2P (actual)</span><span><i style="background:#9aa5ff"></i>Matched P2P (agent plan)</span></div></div>
-    <div class="card"><h2>Live events</h2><div id="events"><small>Press "+3 kWh" on a home to simulate a sudden load the agent didn't predict.</small></div>
+    <div class="card"><h2>Live events</h2><div id="events"><small>Select a home, then send a load event or add appliances.</small></div>
       <h2 style="margin-top:12px">Energy flows this hour</h2><div class="flow" id="flows"><small>-</small></div></div>
   </div>
-  <div class="card"><h2>Homes (virtual smart meters) <small id="slotinfo"></small></h2><div class="nodes" id="nodes"></div></div>
+
+  <div class="card"><h2>Homes <small id="slotinfo"></small> <button id="btnAddHouse" style="float:right">＋ Add house</button></h2><div class="nodes" id="nodes"></div></div>
+
+  <div class="card" id="editor" style="display:none"></div>
+
   <div class="grid2">
     <div class="card"><h2>User ledger <select id="ledNode"></select> <small>(units for discom part; money only for P2P)</small></h2><div style="max-height:300px;overflow:auto"><table id="ledger"></table></div></div>
-    <div class="card"><h2>Statement</h2><div id="stmt"></div>
-      <h2 style="margin-top:14px">Compare sharing modes <button id="btnCmp" style="margin-left:8px">Run (3 days, same data)</button></h2><div id="cmp"><small>Runs Static / Dynamic / Hybrid on identical data.</small></div></div>
+    <div class="card"><h2>Statement</h2><div id="stmt"></div></div>
+  </div>
+
+  <div class="grid3">
+    <div class="card"><h2>Compare sharing modes <button id="btnCmp" style="margin-left:6px">Run (3 days, current community)</button></h2><div id="cmp"><small>Runs Static / Dynamic / Hybrid on identical data.</small></div></div>
+    <div class="card"><h2>Tariff &amp; policy settings</h2><div id="settings"></div></div>
+    <div class="card"><h2>Data &amp; config</h2>
+      <div class="frow"><a href="/export/ledger.csv"><button>⬇ Ledger CSV</button></a><a href="/export/meter.csv"><button>⬇ Meter CSV</button></a><button id="btnCfgExport">⬇ Community JSON</button></div>
+      <div class="frow"><label class="field">Import community JSON<input type="file" id="cfgFile" accept=".json"></label></div>
+      <div class="frow"><button class="danger" id="btnDefaults">Restore demo community</button></div>
+      <small>Reset keeps your houses. "Restore demo" brings back the original 10 homes.</small></div>
   </div>
 </main>
+<div id="toast"></div>
 <script>
-const $=id=>document.getElementById(id), post=(p)=>fetch(p,{method:'POST'}).then(r=>r.json()), f2=x=>(+x).toFixed(2);
-let S=null, ledSel=null;
-$('btnRun').onclick=()=>post(S&&S.running?'/pause':'/start'); $('btnStep').onclick=()=>post('/step'); $('btnReset').onclick=()=>post('/reset?mode='+$('mode').value);
+const $=id=>document.getElementById(id), f2=x=>(+x).toFixed(2), hh=h=>String(h).padStart(2,'0')+':00';
+let S=null, CAT=null, selected=null, NODE=null, ledSel=null, editorKey='';
+function toast(m){const t=$('toast');t.textContent=m;t.style.display='block';clearTimeout(t._h);t._h=setTimeout(()=>t.style.display='none',3500)}
+async function api(method,path,body){
+  const go=()=>fetch(path,{method,headers:{'Content-Type':'application/json','X-Admin-Token':sessionStorage.getItem('adm')||''},body:body===undefined?undefined:JSON.stringify(body)});
+  let r=await go();
+  if(r.status===401){const t=prompt('Admin token required:');if(t){sessionStorage.setItem('adm',t);r=await go()}}
+  let d=null;try{d=await r.json()}catch(e){}
+  if(!r.ok){toast('⚠ '+((d&&d.detail)?(typeof d.detail==='string'?d.detail:JSON.stringify(d.detail)):r.status));throw new Error('api')}
+  return d}
+const post=(p,b)=>api('POST',p,b), patch=(p,b)=>api('PATCH',p,b), del=p=>api('DELETE',p);
+
+$('btnRun').onclick=()=>post(S&&S.running?'/pause':'/start'); $('btnStep').onclick=()=>post('/step');
+$('btnReset').onclick=()=>post('/reset').then(()=>toast('History cleared. Houses kept.'));
 $('speed').onchange=e=>post('/speed?value='+e.target.value); $('mode').onchange=e=>post('/mode?name='+e.target.value);
+$('temp').oninput=e=>$('tv').textContent=e.target.value+' °C'; $('temp').onchange=e=>post('/scenario',{temp_c:+e.target.value});
+$('cloud').oninput=e=>$('cv').textContent=e.target.value+' %'; $('cloud').onchange=e=>post('/scenario',{cloud_cover:+e.target.value/100});
+$('btnOutage').onclick=()=>post('/scenario',{outage:!(S&&S.scenario.outage)});
+const preset=async n=>{const r=await post('/scenario',{preset:n});$('temp').value=r.temp_c;$('tv').textContent=r.temp_c+' °C';$('cloud').value=Math.round(r.cloud_cover*100);$('cv').textContent=Math.round(r.cloud_cover*100)+' %'};
 $('ledNode').onchange=e=>{ledSel=e.target.value;loadLedger()};
 $('btnCmp').onclick=async()=>{$('cmp').innerHTML='Running...';const d=await (await fetch('/compare?days=3')).json();
- $('cmp').innerHTML='<table><tr><th>Mode</th><th>Homes fully served</th><th>Fairness</th><th>P2P kWh</th><th>Grid import</th></tr>'+d.map(r=>`<tr><td>${r.mode}</td><td>${r.homes_fully_served_pct}%</td><td>${r.fairness_jain}</td><td>${r.p2p_kwh}</td><td>${r.grid_import_kwh}</td></tr>`).join('')+'</table><small>Dynamic serves the most homes completely; Static is fairest; Hybrid balances both.</small>'};
-const hh=h=>String(h).padStart(2,'0')+':00';
+ $('cmp').innerHTML='<table><tr><th>Mode</th><th>Homes fully served</th><th>Fairness</th><th>P2P kWh</th><th>Grid import</th><th>User gain ₹</th></tr>'+d.map(r=>`<tr><td>${r.mode}</td><td>${r.homes_fully_served_pct}%</td><td>${r.fairness_jain}</td><td>${r.p2p_kwh}</td><td>${r.grid_import_kwh}</td><td>${r.user_gain_rs}</td></tr>`).join('')+'</table><small>Try Heatwave first: scarcity makes the modes differ. Dynamic serves the most homes fully; Static is fairest; Hybrid balances both.</small>'};
+$('btnDefaults').onclick=async()=>{if(confirm('Replace the community with the original 10 demo homes?')){await post('/reset?defaults=true');selected=null;NODE=null;toast('Demo community restored')}};
+$('btnCfgExport').onclick=async()=>{const d=await (await fetch('/config')).json();const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([JSON.stringify(d,null,2)],{type:'application/json'}));a.download='community.json';a.click()};
+$('cfgFile').onchange=async e=>{const f=e.target.files[0];if(!f)return;try{const j=JSON.parse(await f.text());const r=await post('/config',j);toast('Imported homes: '+r.nodes.join(', '));selected=null;NODE=null}catch(err){toast('Import failed')}e.target.value=''};
+
+// ---------------- add house dialog (inline) ----------------
+$('btnAddHouse').onclick=()=>{selected='__new__';NODE=null;renderEditor(true)};
+
 function render(){ if(!S) return; const s=S.summary, L=S.last;
- $('clock').textContent=`Day ${S.day} · ${hh(S.hour)}`; $('btnRun').textContent=S.running?'⏸ Pause':'▶ Start'; $('mode').value=S.mode;
- $('fsrc').textContent='forecast: '+(L?L.forecast_source:'-');
- $('kpis').innerHTML=[['P2P energy shared',f2(s.p2p_kwh)+' kWh'],['Supply used',s.supply_used_pct+'%'],['Demand met by P2P',s.demand_met_by_p2p_pct+'%'],['Grid import',f2(s.grid_import_kwh)+' kWh'],['User gain',`₹${s.user_gain_rs}`],['Discom grid fee',`₹${s.discom_fee_rs}`],['Forecast error (load)',s.forecast_mae_load+' kWh']]
+ $('err').style.display=S.error?'block':'none'; $('err').textContent=S.error?('Engine error: '+S.error+' (see the terminal for details)'):'';
+ $('clock').textContent=`Day ${S.day} · ${hh(S.hour)}`; $('btnRun').textContent=S.running?'⏸ Pause':'▶ Start'; if(document.activeElement!==$('mode'))$('mode').value=S.mode;
+ $('fsrc').textContent='forecast: '+(L?L.forecast_source:'-'); $('dbb').textContent='db: '+S.db_backend; $('outb').style.display=S.scenario.outage?'inline-block':'none';
+ $('btnOutage').textContent=S.scenario.outage?'Restore grid':'Cut grid (outage)'; $('btnOutage').className=S.scenario.outage?'danger':'';
+ if(document.activeElement!==$('temp')){$('temp').value=S.scenario.temp_c;$('tv').textContent=S.scenario.temp_c+' °C'}
+ if(document.activeElement!==$('cloud')){$('cloud').value=Math.round(S.scenario.cloud_cover*100);$('cv').textContent=Math.round(S.scenario.cloud_cover*100)+' %'}
+ $('kpis').innerHTML=[['P2P energy shared',f2(s.p2p_kwh)+' kWh'],['Demand met by P2P',s.demand_met_by_p2p_pct+'%'],['Grid import cut',s.grid_import_reduction_pct+'%'],['Local energy share',s.local_energy_share_pct+'%'],['User savings',`₹${s.user_gain_rs}`],['CO₂ avoided (est.)',s.co2_avoided_kg+' kg'],['Unserved (outage)',f2(s.unserved_kwh)+' kWh'],['Forecast error',s.forecast_mae_load+' kWh']]
   .map(k=>`<div class="kpi"><b>${k[1]}</b><span>${k[0]}</span></div>`).join('');
- const nodes=L?L.nodes:S.nodes.map(n=>({node:n.id,role:'neutral',load:0,solar:0,soc:n.soc,planned_p2p:0,p2p_bought:0,p2p_sold:0,grid_import:0,grid_export:0}));
+ const nodes=L?L.nodes:S.nodes.map(n=>({node:n.id,role:'neutral',load:0,solar:0,soc:n.soc,planned_p2p:0,p2p_bought:0,p2p_sold:0,grid_import:0,grid_export:0,unserved:0}));
  const info=Object.fromEntries(S.nodes.map(n=>[n.id,n])), mx=Math.max(1,...nodes.map(n=>Math.max(n.load,n.solar)));
  if(L) $('slotinfo').textContent=`(showing ${hh(L.slot.hour)} on day ${L.slot.day}, price ₹${L.slot.price}/kWh)`;
- $('nodes').innerHTML=nodes.map(n=>{const i=info[n.node], q=S.pending[n.node];
-  return `<div class="node ${n.role}"><div class="top"><span>Home ${n.node}</span><span class="role">${n.role}</span></div>
-  <small>${i.panel_kw?i.panel_kw+' kW solar':'no solar'}${i.battery_kwh?' · '+i.battery_kwh+' kWh battery':''}</small>
+ $('nodes').innerHTML=S.nodes.map(i=>{const n=nodes.find(x=>x.node===i.id)||{node:i.id,role:'neutral',load:0,solar:0,soc:i.soc,planned_p2p:0,p2p_bought:0,p2p_sold:0,grid_import:0,grid_export:0,unserved:0};const q=S.pending[n.node];
+  return `<div class="node ${n.role} ${selected===n.node?'sel':''}"><div class="top"><span>Home ${n.node}</span><span class="role">${n.role}</span></div>
+  <small>${i.panel_kw?i.panel_kw+' kW solar':'no solar'}${i.battery_kwh?' · '+i.battery_kwh+' kWh battery':''} · ${i.n_appliances} loads</small>
   <div class="row"><span>Load</span><b>${f2(n.load)}</b></div><div class="bar"><i style="width:${100*n.load/mx}%;background:#d9480f"></i></div>
   <div class="row"><span>Solar</span><b>${f2(n.solar)}</b></div><div class="bar"><i style="width:${100*n.solar/mx}%;background:#1f9d55"></i></div>
-  ${i.battery_kwh?`<div class="row"><span>Battery</span><b>${f2(n.soc)} / ${i.battery_kwh}</b></div><div class="bar"><i style="width:${100*n.soc/i.battery_kwh}%;background:#2563eb"></i></div>`:''}
+  ${i.battery_kwh?`<div class="row"><span>Battery</span><b>${f2(i.soc)} / ${i.battery_kwh}</b></div><div class="bar"><i style="width:${100*i.soc/i.battery_kwh}%;background:#2563eb"></i></div>`:''}
   <div class="row"><span>P2P bought (planned)</span><b>${f2(n.p2p_bought)} (${f2(n.planned_p2p)})</b></div>
   <div class="row"><span>P2P sold</span><b>${f2(n.p2p_sold)}</b></div>
-  <div class="row"><span>Discom import / export</span><b>${f2(n.grid_import)} / ${f2(n.grid_export)}</b></div>
-  <button onclick="post('/inject?node=${n.node}&kwh=3')">${q?'⚡ queued +'+q+' kWh':'⚡ +3 kWh sudden demand'}</button></div>`}).join('');
- if(!$('ledNode').options.length){$('ledNode').innerHTML=S.nodes.map(n=>`<option>${n.id}</option>`).join('');ledSel=S.nodes[0].id}
+  <div class="row"><span>Discom in / out</span><b>${f2(n.grid_import)} / ${f2(n.grid_export)}</b></div>
+  ${n.unserved>0?`<div class="row"><span style="color:var(--bad)">Unserved</span><b style="color:var(--bad)">${f2(n.unserved)}</b></div>`:''}
+  <div class="btns"><button onclick="openHome('${n.node}')">✎ Edit loads</button><button onclick="post('/inject?node=${n.node}&kwh=3')">${q?'⚡ queued '+q:'⚡ +3 kW'}</button></div></div>`}).join('');
+ if(!$('ledNode').options.length||$('ledNode').options.length!==S.nodes.length){$('ledNode').innerHTML=S.nodes.map(n=>`<option ${n.id===ledSel?'selected':''}>${n.id}</option>`).join('');if(!ledSel||!S.nodes.find(n=>n.id===ledSel))ledSel=S.nodes[0].id;$('ledNode').value=ledSel}
  $('flows').innerHTML=L&&L.matches.length?L.matches.map(m=>`<span>${m.seller} → ${m.buyer}: ${f2(m.kwh)} kWh</span>`).join(''):'<small>No P2P flow this hour.</small>';
  $('events').innerHTML=S.events.length?S.events.slice().reverse().map(e=>`<div class="ev"><b>D${e.day} ${hh(e.hour)}</b> ${e.text}</div>`).join(''):$('events').innerHTML;
- drawChart(S.history);
+ renderSettings(); drawChart(S.history);
 }
-function drawChart(h){const c=$('chart'),x=c.getContext('2d'),W=c.width,H=c.height,p=28;x.clearRect(0,0,W,H);
+function drawChart(h){const c=$('chart'),x=c.getContext('2d'),W=c.width,H=c.height,p=28;x.clearRect(0,0,W,H);h=h.slice(-72);
  if(!h.length) return; const mx=Math.max(1,...h.map(s=>Math.max(s.supply,s.demand,s.matched,s.planned_matched)))*1.1;
  x.strokeStyle='#e3e6ec';x.fillStyle='#6b7385';x.font='11px sans-serif';
  for(let i=0;i<=4;i++){const y=p+(H-2*p)*i/4;x.beginPath();x.moveTo(p,y);x.lineTo(W-6,y);x.stroke();x.fillText((mx*(1-i/4)).toFixed(1),0,y+3)}
  const line=(k,col,w=2,d=[])=>{x.beginPath();x.setLineDash(d);x.strokeStyle=col;x.lineWidth=w;h.forEach((s,i)=>{const X=p+(W-p-6)*i/Math.max(1,h.length-1),Y=H-p-(H-2*p)*s[k]/mx;i?x.lineTo(X,Y):x.moveTo(X,Y)});x.stroke();x.setLineDash([])};
  line('supply','#1f9d55');line('demand','#d9480f');line('planned_matched','#9aa5ff',2,[5,4]);line('matched','#2563eb',3);
  x.fillStyle='#6b7385';[0,Math.floor(h.length/2),h.length-1].forEach(i=>x.fillText(hh(h[i].hour),p+(W-p-6)*i/Math.max(1,h.length-1)-14,H-8))}
+
+// ---------------- house editor ----------------
+async function openHome(id){selected=id;NODE=await (await fetch('/nodes/'+id)).json();renderEditor();$('editor').scrollIntoView({behavior:'smooth',block:'nearest'})}
+async function reloadHome(){if(selected&&selected!=='__new__'){NODE=await (await fetch('/nodes/'+selected)).json();renderEditor()}}
+function typeOptions(){return Object.entries(CAT.appliances).map(([k,v])=>`<option value="${k}">${v.label} (${v.kw} kW)</option>`).join('')}
+function renderEditor(isNew){
+ const el=$('editor'); el.style.display='block';
+ if(selected==='__new__'){
+  el.innerHTML=`<h2>Add a new house</h2><div class="frow">
+   <label class="field">ID (optional)<input type="text" id="nid" placeholder="auto"></label>
+   <label class="field">Solar kW<input type="number" id="npv" value="0" min="0" step="0.5"></label>
+   <label class="field">Battery kWh<input type="number" id="nbat" value="0" min="0" step="1"></label>
+   <label class="field">People<input type="number" id="nsz" value="4" min="1" max="30"></label>
+   <label class="field">Air conditioner<select id="nac"><option>night</option><option>day</option><option>both</option><option>none</option></select></label>
+   <button class="primary" id="nok">Create house</button><button id="ncancel">Cancel</button></div>
+   <small>A starter set of appliances is created from the household size; edit them afterwards.</small>`;
+  $('ncancel').onclick=()=>{selected=null;el.style.display='none'};
+  $('nok').onclick=async()=>{const b={panel_kw:+$('npv').value,battery_kwh:+$('nbat').value,household_size:+$('nsz').value,ac:$('nac').value};if($('nid').value.trim())b.id=$('nid').value.trim();
+    const r=await post('/nodes',b);toast('House '+r.id+' added');await openHome(r.id)};
+  return}
+ if(!NODE||!CAT){el.style.display='none';return}
+ const n=NODE;
+ el.innerHTML=`<h2>Home ${n.id} — loads &amp; equipment <button style="float:right" onclick="closeEditor()">Close</button></h2>
+  <div class="frow"><label class="field">Solar kW<input type="number" id="epv" value="${n.panel_kw}" min="0" step="0.5"></label>
+   <label class="field">Battery kWh<input type="number" id="ebat" value="${n.battery_kwh}" min="0" step="1"></label>
+   <label class="field">People<input type="number" id="esz" value="${n.household_size}" min="1" max="30"></label>
+   <button id="esave">Save house</button><button class="danger" id="edel">Delete house</button>
+   <span class="mute">Expected: ${n.expected_daily_load_kwh} kWh load / ${n.expected_daily_solar_kwh} kWh solar per day</span></div>
+  <table><tr><th>Load</th><th>kW</th><th>Window</th><th>Duty</th><th>Mode</th><th>≈ kWh/day</th><th></th></tr>
+  ${n.appliances.map(a=>`<tr><td>${a.name}${a.type==='event'?'<span class="pill">event</span>':''}${a.enabled?'':'<span class="pill off">off</span>'}</td><td>${a.kw}</td><td>${a.once?`${a.once.hours}h from D${a.once.day} ${hh(a.once.hour)}`:hh(a.start)+'–'+(a.end===24?'24:00':hh(a.end))}</td><td>${a.once?'-':a.duty}</td>
+   <td>${a.flexible?`<span class="pill">flexible → ${(a.sched||[]).map(hh).join(', ')||'-'}</span>`:(a.sensitivity!=='none'?a.sensitivity:'fixed')}</td><td>${a.daily_kwh}</td>
+   <td>${a.once?'':`<button onclick="togApp('${a.id}')">${a.enabled?'Turn off':'Turn on'}</button>`}<button class="danger" onclick="delApp('${a.id}')">✕</button></td></tr>`).join('')}</table>
+  <h2 style="margin-top:12px">Add a load</h2>
+  <div class="frow">
+   <label class="field">Type<select id="atype">${typeOptions()}</select></label>
+   <label class="field">Name<input type="text" id="aname" style="width:130px"></label>
+   <label class="field">kW<input type="number" id="akw" step="0.1" min="0.01"></label>
+   <label class="field">From hour<input type="number" id="astart" min="0" max="24"></label>
+   <label class="field">To hour<input type="number" id="aend" min="0" max="24"></label>
+   <label class="field">Duty 0-1<input type="number" id="aduty" step="0.05" min="0" max="1"></label>
+   <label class="field">Flexible<select id="aflex"><option value="no">no (fixed time)</option><option value="yes">yes (engine picks sunny hours)</option></select></label>
+   <label class="field">Run hours<input type="number" id="adur" min="1" value="1"></label>
+   <button class="primary" id="aadd">Add load</button></div>
+  <h2 style="margin-top:12px">Send a temporary load event</h2>
+  <div class="frow"><label class="field">Name<input type="text" id="evname" value="Guests arrive" style="width:130px"></label>
+   <label class="field">kW<input type="number" id="evkw" value="4" step="0.5" min="0.1"></label>
+   <label class="field">Hours<input type="number" id="evh" value="2" min="1" max="168"></label>
+   <label class="field">Forecast agent<select id="evs"><option value="true">not told (surprise)</option><option value="false">told (planned)</option></select></label>
+   <button id="evgo">⚡ Start next hour</button></div>`;
+ const fill=()=>{const d=CAT.appliances[$('atype').value];$('akw').value=d.kw;$('astart').value=d.start;$('aend').value=d.end;$('aduty').value=d.duty??1;$('aflex').value=d.flexible?'yes':'no';$('adur').value=d.duration_h||1;$('aname').value=''};
+ $('atype').onchange=fill; fill();
+ $('esave').onclick=async()=>{await patch('/nodes/'+n.id,{panel_kw:+$('epv').value,battery_kwh:+$('ebat').value,household_size:+$('esz').value});toast('Saved');reloadHome()};
+ $('edel').onclick=async()=>{if(confirm('Delete home '+n.id+'? Its history stays in the ledger.')){await del('/nodes/'+n.id);selected=null;NODE=null;$('editor').style.display='none'}};
+ $('aadd').onclick=async()=>{const b={type:$('atype').value,kw:+$('akw').value,start:+$('astart').value,end:+$('aend').value,duty:+$('aduty').value,flexible:$('aflex').value==='yes',duration_h:+$('adur').value};if($('aname').value.trim())b.name=$('aname').value.trim();
+   await post(`/nodes/${n.id}/appliances`,b);toast('Load added');reloadHome()};
+ $('evgo').onclick=async()=>{await post(`/nodes/${n.id}/events`,{kw:+$('evkw').value,hours:+$('evh').value,name:$('evname').value,surprise:$('evs').value==='true'});toast('Event queued for the next hour');reloadHome()};
+}
+function closeEditor(){selected=null;NODE=null;$('editor').style.display='none'}
+async function togApp(id){await post(`/nodes/${selected}/appliances/${id}/toggle`);reloadHome()}
+async function delApp(id){await del(`/nodes/${selected}/appliances/${id}`);reloadHome()}
+
+// ---------------- settings ----------------
+let setKey='';
+function renderSettings(){const s=S.settings, key=JSON.stringify(s);if(key===setKey&&$('settings').innerHTML)return;if($('settings').contains(document.activeElement)&&$('settings').innerHTML)return;setKey=key;
+ $('settings').innerHTML=`<div class="frow"><label class="field">Feed-in ₹/kWh<input type="number" id="sfi" value="${s.feed_in}" step="0.5"></label><label class="field">Retail ₹/kWh<input type="number" id="sre" value="${s.retail}" step="0.5"></label><label class="field">Grid fee ₹/kWh<input type="number" id="sgf" value="${s.grid_fee}" step="0.1"></label></div>
+ <div class="frow"><label class="field">Hybrid base share<input type="number" id="sbe" value="${s.beta}" step="0.1" min="0" max="1"></label><label class="field">Dynamic priority<select id="spo"><option value="smallest_first" ${s.policy==='smallest_first'?'selected':''}>smallest need first</option><option value="largest_first" ${s.policy==='largest_first'?'selected':''}>largest need first</option></select></label></div>
+ <div class="frow"><label class="field">CO₂ kg/kWh<input type="number" id="sco" value="${s.co2_factor}" step="0.01"></label><label class="field">Price<select id="sdp"><option value="true" ${s.dynamic_price?'selected':''}>moves with scarcity</option><option value="false" ${!s.dynamic_price?'selected':''}>fixed midpoint</option></select></label><button id="ssave">Apply</button></div>`;
+ $('ssave').onclick=async()=>{await post('/settings',{feed_in:+$('sfi').value,retail:+$('sre').value,grid_fee:+$('sgf').value,beta:+$('sbe').value,policy:$('spo').value,co2_factor:+$('sco').value,dynamic_price:$('sdp').value==='true'});toast('Settings applied')}}
+
+// ---------------- ledger ----------------
 async function loadLedger(){ if(!ledSel) return;
  const rows=await (await fetch(`/ledger/${ledSel}?limit=14`)).json(), st=await (await fetch('/statement/'+ledSel)).json();
- $('ledger').innerHTML='<tr><th>Slot</th><th>Discom import</th><th>Discom export</th><th>P2P bought</th><th>P2P sold</th><th>Pay / Earn (₹)</th></tr>'+
-  rows.map(r=>`<tr><td>D${r.day} ${hh(r.hour)}</td><td>${f2(r.grid_import)}</td><td>${f2(r.grid_export)}</td><td>${r.p2p_bought>0?'+'+f2(r.p2p_bought)+' credited':'-'}</td><td>${r.p2p_sold>0?'-'+f2(r.p2p_sold)+' sold':'-'}</td><td>${r.p2p_owed_rs?'pay '+r.p2p_owed_rs:r.p2p_earned_rs?'earn '+r.p2p_earned_rs:'-'}</td></tr>`).join('');
- $('stmt').innerHTML=`<table><tr><td>Discom import</td><td>${st.discom_import_kwh} kWh</td></tr><tr><td>Discom export</td><td>${st.discom_export_kwh} kWh</td></tr><tr><td>P2P sold</td><td>${st.p2p_sold_kwh} kWh · earned ₹${st.p2p_earned_rs}</td></tr><tr><td>P2P bought</td><td>${st.p2p_bought_kwh} kWh · owed ₹${st.p2p_owed_rs}</td></tr><tr><td>Grid fee (on discom bill)</td><td>₹${st.grid_fee_on_discom_bill_rs}</td></tr><tr><td><b>Net wallet</b></td><td><b>₹${st.net_wallet_rs}</b></td></tr></table><small>${st.note}</small>`}
-async function poll(){try{S=await (await fetch('/state')).json();render()}catch(e){} setTimeout(poll,500)}
-poll(); setInterval(loadLedger,1500);
+ $('ledger').innerHTML='<tr><th>Slot</th><th>Discom import</th><th>Discom export</th><th>P2P bought</th><th>P2P sold</th><th>Pay / Earn (₹)</th><th>Saved ₹</th></tr>'+
+  rows.map(r=>`<tr><td>D${r.day} ${hh(r.hour)}</td><td>${f2(r.grid_import)}</td><td>${f2(r.grid_export)}</td><td>${r.p2p_bought>0?'+'+f2(r.p2p_bought)+' credited':'-'}</td><td>${r.p2p_sold>0?'-'+f2(r.p2p_sold)+' sold':'-'}</td><td>${r.p2p_owed_rs?'pay '+f2(r.p2p_owed_rs):r.p2p_earned_rs?'earn '+f2(r.p2p_earned_rs):'-'}</td><td>${f2(r.benefit_rs)}</td></tr>`).join('');
+ $('stmt').innerHTML=`<table><tr><td>Total load</td><td>${st.total_load_kwh} kWh</td></tr><tr><td>Solar generated</td><td>${st.total_solar_kwh} kWh</td></tr><tr><td>Discom import</td><td>${st.discom_import_kwh} kWh</td></tr><tr><td>Discom export</td><td>${st.discom_export_kwh} kWh</td></tr><tr><td>P2P sold</td><td>${st.p2p_sold_kwh} kWh · earned ₹${st.p2p_earned_rs}</td></tr><tr><td>P2P bought</td><td>${st.p2p_bought_kwh} kWh · owed ₹${st.p2p_owed_rs}</td></tr><tr><td>Grid fee (on discom bill)</td><td>₹${st.grid_fee_on_discom_bill_rs}</td></tr><tr><td><b>Net wallet</b></td><td><b>₹${st.net_wallet_rs}</b></td></tr><tr><td><b>Saved vs no P2P</b></td><td><b>₹${st.p2p_benefit_rs}</b></td></tr>${st.unserved_kwh?`<tr><td style="color:var(--bad)">Unserved</td><td>${st.unserved_kwh} kWh</td></tr>`:''}</table><small>${st.note}</small>`}
+async function poll(){try{S=await (await fetch('/state')).json();render()}catch(e){} setTimeout(poll,600)}
+(async()=>{CAT=await (await fetch('/catalog')).json();poll();setInterval(loadLedger,1500)})();
 </script></body></html>
