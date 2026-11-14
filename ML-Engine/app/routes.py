@@ -1,4 +1,5 @@
 from __future__ import annotations
+import collections
 import math
 import os
 import sys
@@ -60,17 +61,16 @@ if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
 from data.generators.weather_fetcher import CITY_COORDINATES
+import appliances as ap
 from data.generators.indian_load_profile import IndianMicrogridSimulator
 from models.lgbm_forecaster import QuantileEnergyForecaster
 from models.explainability import EnergyExplainer
-from market.p2p_clearing import MicrogridP2PClearingEngine
 from aws.bedrock_agent import BedrockEnergyAgent
 from app.models import (
     SingleNodeForecastRequest,
     SingleNodeForecastResponse,
     QuantileForecastValues,
     HorizonForecastRequest,
-    MarketClearRequest,
     AdvisoryRequest,
     ShapExplainRequest,
     WeatherShockSenseRequest,
@@ -83,7 +83,6 @@ router = APIRouter()
 
 _SIMULATOR: Optional[IndianMicrogridSimulator] = None
 _FORECASTER: Optional[QuantileEnergyForecaster] = None
-_CLEARING_ENGINE: Optional[MicrogridP2PClearingEngine] = None
 _BEDROCK_AGENT: Optional[BedrockEnergyAgent] = None
 _EXPLAINER: Optional[EnergyExplainer] = None
 
@@ -91,19 +90,16 @@ _EXPLAINER: Optional[EnergyExplainer] = None
 def get_explainer() -> EnergyExplainer:
     global _EXPLAINER
     if _EXPLAINER is None:
-        _, forecaster, _, _ = get_components()
+        _, forecaster, _ = get_components()
         _EXPLAINER = EnergyExplainer(forecaster)
     return _EXPLAINER
 
 
 def get_components():
-    global _SIMULATOR, _FORECASTER, _CLEARING_ENGINE, _BEDROCK_AGENT
+    global _SIMULATOR, _FORECASTER, _BEDROCK_AGENT
 
     if _SIMULATOR is None:
         _SIMULATOR = IndianMicrogridSimulator()
-
-    if _CLEARING_ENGINE is None:
-        _CLEARING_ENGINE = MicrogridP2PClearingEngine()
 
     if _BEDROCK_AGENT is None:
         _BEDROCK_AGENT = BedrockEnergyAgent()
@@ -118,7 +114,7 @@ def get_components():
             )
             _FORECASTER.train(df_boot, num_boost_round=60)
 
-    return _SIMULATOR, _FORECASTER, _CLEARING_ENGINE, _BEDROCK_AGENT
+    return _SIMULATOR, _FORECASTER, _BEDROCK_AGENT
 
 
 @router.get("/", tags=["General"])
@@ -137,7 +133,6 @@ def root_info():
             "POST /forecast/explain",
             "POST /forecast/explain-grid",
             "POST /forecast/microgrid",
-            "POST /market/clear",
             "POST /agent/advisory",
             "POST /agent/sense-weather-shock",
             "POST /agent/weather-shock",
@@ -148,7 +143,7 @@ def root_info():
 
 @router.get("/health", tags=["General"])
 def health_check():
-    sim, forecaster, clearing, agent = get_components()
+    sim, forecaster, agent = get_components()
     return {
         "status": "healthy",
         "models_loaded": len(forecaster.load_models) > 0 and len(forecaster.solar_models) > 0,
@@ -159,7 +154,7 @@ def health_check():
 
 @router.get("/nodes", tags=["Topology"])
 def get_microgrid_nodes():
-    sim, _, _, _ = get_components()
+    sim, _, _ = get_components()
     return {
         "microgrid_id": sim.config.get("microgrid_id", "mg_bengaluru_east_01"),
         "grid_reference_rates": sim.config.get("grid_reference_rates", {}),
@@ -168,36 +163,125 @@ def get_microgrid_nodes():
     }
 
 
-def _weather_for_hour(hour: int) -> dict:
-    """Diurnal proxy so a single simulation slot has the columns the forecaster expects."""
+_NODE_RECENT_HISTORY: dict[str, list[dict]] = collections.defaultdict(list)
+
+
+def _weather_for_hour(hour: int, temp_c: Optional[float] = None, cloud_cover: Optional[float] = None) -> dict:
+    """Diurnal proxy so a single simulation slot has the columns the forecaster expects.
+    Uses temp_c and cloud_cover if provided by the caller (e.g. Simulation Engine).
+    """
+    if temp_c is not None:
+        t_c = float(temp_c)
+    else:
+        t_c = 26.0 + 6.0 * math.sin(math.pi * (hour - 6) / 18.0)
+
+    if cloud_cover is not None:
+        c_cov = float(cloud_cover)
+        c_pct = c_cov * 100.0 if c_cov <= 1.0 else c_cov
+    else:
+        c_pct = 20.0
+    c_pct = max(0.0, min(100.0, c_pct))
+
     if 6 <= hour <= 18:
-        solar_frac = math.sin(math.pi * (hour - 6) / 12.0)
+        solar_frac = max(0.0, math.sin(math.pi * (hour - 6) / 12.0))
     else:
         solar_frac = 0.0
-    ghi = 950.0 * solar_frac
+
+    cloud_attenuation = max(0.0, 1.0 - 0.8 * (c_pct / 100.0))
+    ghi = 950.0 * solar_frac * cloud_attenuation
     return {
-        "temperature_c": 26.0 + 6.0 * math.sin(math.pi * (hour - 6) / 18.0),
+        "temperature_c": t_c,
         "ghi_w_m2": ghi,
         "dni_w_m2": ghi * 0.85,
         "dhi_w_m2": ghi * 0.18,
-        "cloud_cover_pct": 20.0,
+        "cloud_cover_pct": c_pct,
         "humidity_pct": 55.0,
     }
+
+
+def _seed_node_history(node_id: str, anchor_dt: pd.Timestamp, payload: SlotPredictRequest, ac_units: int, has_ev: int) -> list[dict]:
+    """Seed 24 hours of prior hourly history before anchor_dt so lag & rolling features are populated."""
+    history = []
+    panel_kw = float(payload.panel_kw)
+    base_kw = float(payload.base_kw or 1.0)
+    hh_size = int(payload.household_size or 3)
+
+    for h_back in range(24, 0, -1):
+        dt = anchor_dt - pd.Timedelta(hours=h_back)
+        h = dt.hour
+        d = (dt - pd.Timestamp("2024-03-04")).days
+        w = _weather_for_hour(h, None, None)
+        if payload.appliance_details:
+            expected_load = ap.STANDBY_KW + sum(
+                ap.expected_kw(a, d, h, w["temperature_c"]) for a in payload.appliance_details
+            )
+        else:
+            fallback_curve = (0.6 + 0.5 * math.exp(-((h - 8) ** 2) / 4)
+                              + 0.5 * math.exp(-((h - 15) ** 2) / 6)
+                              + 0.9 * math.exp(-((h - 20) ** 2) / 5))
+            expected_load = base_kw * fallback_curve
+
+        s_shape = ap.solar_shape(h)
+        s_factor = ap.solar_factor(w["cloud_cover_pct"] / 100.0)
+        expected_solar = panel_kw * s_shape * s_factor * 0.95
+
+        history.append({
+            "datetime": dt,
+            "node_id": node_id,
+            "temperature_c": w["temperature_c"],
+            "ghi_w_m2": w["ghi_w_m2"],
+            "dni_w_m2": w["dni_w_m2"],
+            "dhi_w_m2": w["dhi_w_m2"],
+            "cloud_cover_pct": w["cloud_cover_pct"],
+            "humidity_pct": w["humidity_pct"],
+            "solar_capacity_kw": panel_kw,
+            "household_size": hh_size,
+            "ac_units": ac_units,
+            "has_ev": has_ev,
+            "actual_load_kwh": round(expected_load, 3),
+            "actual_solar_kwh": round(expected_solar, 3),
+        })
+    return history
 
 
 @router.post("/predict", tags=["Forecasting"])
 def predict_slot(payload: SlotPredictRequest):
     """Contract used by the simulation engine (FORECAST_URL)."""
-    _, forecaster, _, _ = get_components()
-    appliances = payload.appliances or []
-    ac_units = sum(1 for a in appliances if str(a).lower() == "ac")
-    has_ev = int(any(str(a).lower() == "ev" for a in appliances))
-    weather = _weather_for_hour(payload.hour)
-    when = pd.Timestamp("2024-03-04") + pd.Timedelta(days=int(payload.day), hours=int(payload.hour))
-    recent_load = float(payload.base_kw)
-    recent_solar = float(payload.panel_kw) * (weather["ghi_w_m2"] / 1000.0) * 0.82
+    _, forecaster, _ = get_components()
 
-    df_row = pd.DataFrame([{
+    # Detect AC units and EV presence across appliance string list or rich appliance_details
+    if payload.appliance_details:
+        ac_units = sum(1 for a in payload.appliance_details if str(a.get("type", "")).lower().startswith("ac"))
+        has_ev = int(any(str(a.get("type", "")).lower() == "ev" for a in payload.appliance_details))
+    else:
+        appliances = payload.appliances or []
+        ac_units = sum(1 for a in appliances if str(a).lower().startswith("ac"))
+        has_ev = int(any(str(a).lower() == "ev" for a in appliances))
+
+    weather = _weather_for_hour(payload.hour, payload.temp_c, payload.cloud_cover)
+    when = pd.Timestamp("2024-03-04") + pd.Timedelta(days=int(payload.day), hours=int(payload.hour))
+
+    if payload.appliance_details:
+        current_load = ap.STANDBY_KW + sum(
+            ap.expected_kw(a, payload.day, payload.hour, weather["temperature_c"])
+            for a in payload.appliance_details
+        )
+    else:
+        fallback_curve = (0.6 + 0.5 * math.exp(-((payload.hour - 8) ** 2) / 4)
+                          + 0.5 * math.exp(-((payload.hour - 15) ** 2) / 6)
+                          + 0.9 * math.exp(-((payload.hour - 20) ** 2) / 5))
+        current_load = float(payload.base_kw or 1.0) * fallback_curve
+
+    s_shape = ap.solar_shape(payload.hour)
+    s_factor = ap.solar_factor(weather["cloud_cover_pct"] / 100.0)
+    current_solar = float(payload.panel_kw) * s_shape * s_factor * 0.95
+
+    # Maintain rolling history per node for multi-hour lag/rolling feature fidelity
+    history = _NODE_RECENT_HISTORY[payload.node_id]
+    if not history or history[-1]["datetime"] >= when:
+        history = _seed_node_history(payload.node_id, when, payload, ac_units, has_ev)
+
+    current_row = {
         "datetime": when,
         "node_id": payload.node_id,
         "temperature_c": weather["temperature_c"],
@@ -210,19 +294,25 @@ def predict_slot(payload: SlotPredictRequest):
         "household_size": int(payload.household_size or 3),
         "ac_units": ac_units,
         "has_ev": has_ev,
-        "actual_load_kwh": recent_load,
-        "actual_solar_kwh": recent_solar,
-    }])
+        "actual_load_kwh": round(current_load, 3),
+        "actual_solar_kwh": round(current_solar, 3),
+    }
+    history.append(current_row)
+    if len(history) > 168:
+        history = history[-168:]
+    _NODE_RECENT_HISTORY[payload.node_id] = history
 
-    preds = forecaster.predict(df_row).iloc[0]
+    df_hist = pd.DataFrame(history)
+    preds = forecaster.predict(df_hist).iloc[-1]
     pred_load = max(0.0, float(preds["pred_load"]))
     pred_solar = max(0.0, float(preds["pred_solar"])) if payload.panel_kw > 0 else 0.0
+
     return {"pred_load": round(pred_load, 4), "pred_solar": round(pred_solar, 4)}
 
 
 @router.post("/forecast/node", response_model=SingleNodeForecastResponse, tags=["Forecasting"])
 def forecast_single_node(payload: SingleNodeForecastRequest):
-    sim, forecaster, _, _ = get_components()
+    sim, forecaster, _ = get_components()
 
     node_meta = next((n for n in sim.nodes if n["id"] == payload.node_id), None)
     solar_kw = payload.solar_capacity_kw if payload.solar_capacity_kw is not None else (node_meta.get("solar_capacity_kw", 0.0) if node_meta else 0.0)
@@ -277,7 +367,7 @@ def forecast_single_node(payload: SingleNodeForecastRequest):
 
 @router.post("/forecast/explain", tags=["Explainability"])
 def explain_forecast_slot(payload: ShapExplainRequest):
-    sim, forecaster, _, agent = get_components()
+    sim, forecaster, agent = get_components()
     explainer = get_explainer()
 
     target_dt = resolve_slot_datetime(payload.datetime_str)
@@ -381,7 +471,7 @@ def explain_microgrid_slot_endpoint(payload: ShapExplainRequest = ShapExplainReq
 
 @router.post("/forecast/microgrid", tags=["Forecasting"])
 def forecast_microgrid_horizon(req: HorizonForecastRequest):
-    sim, forecaster, _, _ = get_components()
+    sim, forecaster, _ = get_components()
     target_date = resolve_target_date(req.date)
 
     df = sim.generate_microgrid_dataset(
@@ -428,79 +518,9 @@ def forecast_microgrid_horizon(req: HorizonForecastRequest):
     }
 
 
-@router.post("/market/clear", tags=["Market"])
-def clear_p2p_market(req: MarketClearRequest):
-    sim, forecaster, clearing, _ = get_components()
-    target_date = resolve_target_date(req.date)
-
-    clearing.grid_import_rate = req.grid_import_rate_inr
-    clearing.grid_export_rate = req.grid_export_rate_inr
-    clearing.p2p_clearing_rate = req.p2p_clearing_rate_inr
-
-    df = sim.generate_microgrid_dataset(
-        city=req.city, start_date=target_date, end_date=target_date
-    )
-
-    if req.simulate_weather_shock:
-        afternoon = (df["datetime"].dt.hour >= 13) & (df["datetime"].dt.hour <= 16)
-        df.loc[afternoon, "cloud_cover_pct"] = np.clip(
-            df.loc[afternoon, "cloud_cover_pct"] + req.shock_cloud_pct_increase, 0, 100
-        )
-        df.loc[afternoon, "ghi_w_m2"] = np.clip(
-            df.loc[afternoon, "ghi_w_m2"] * (1.0 - req.shock_cloud_pct_increase / 120.0), 50, 1000
-        )
-
-    preds = forecaster.predict(df)
-    results = clearing.clear_horizon(preds, risk_mode=req.risk_mode)
-    summary_df = clearing.summarize_to_dataframe(results)
-
-    total_traded_kwh = round(float(summary_df["p2p_traded_kwh"].sum()), 2)
-    total_savings_inr = round(float(summary_df["community_savings_inr"].sum()), 2)
-    total_solar_kwh = round(float(summary_df["solar_kwh"].sum()), 2)
-    total_load_kwh = round(float(summary_df["load_kwh"].sum()), 2)
-
-    slots_data = []
-    for r in results:
-        slots_data.append({
-            "slot": r.slot,
-            "solar_kwh": r.total_solar_gen_kwh,
-            "load_kwh": r.total_load_kwh,
-            "surplus_kwh": r.total_surplus_kwh,
-            "deficit_kwh": r.total_deficit_kwh,
-            "p2p_traded_kwh": r.total_p2p_traded_kwh,
-            "community_savings_inr": r.community_savings_inr,
-            "trades_count": len(r.trades),
-            "trades": [
-                {
-                    "seller": t.seller_name,
-                    "buyer": t.buyer_name,
-                    "kwh": t.energy_kwh,
-                    "price_inr": t.clearing_price_inr,
-                    "seller_profit_inr": t.seller_earnings_inr,
-                    "buyer_savings_inr": t.buyer_savings_inr,
-                }
-                for t in r.trades
-            ],
-        })
-
-    return {
-        "date": target_date,
-        "city": req.city,
-        "risk_mode": req.risk_mode,
-        "totals": {
-            "solar_kwh": total_solar_kwh,
-            "load_kwh": total_load_kwh,
-            "p2p_traded_kwh": total_traded_kwh,
-            "community_savings_inr": total_savings_inr,
-            "p2p_coverage_pct": round((total_traded_kwh / total_load_kwh * 100) if total_load_kwh else 0, 1),
-        },
-        "slots": slots_data,
-    }
-
-
 @router.post("/agent/advisory", tags=["GenAI Agent"])
 def get_agent_advisory(req: AdvisoryRequest):
-    sim, _, _, agent = get_components()
+    sim, _, agent = get_components()
     target_date = resolve_target_date(req.date or "tomorrow")
     node_meta = next((n for n in sim.nodes if n["id"] == req.node_id), None)
     node_name = node_meta["name"] if node_meta else req.node_id
@@ -556,7 +576,7 @@ def get_agent_advisory(req: AdvisoryRequest):
 @router.post("/agent/sense-weather-shock", tags=["GenAI Agent"])
 @router.post("/weather/sense-shock", tags=["GenAI Agent"])
 def sense_weather_shock(req: WeatherShockSenseRequest):
-    sim, _, _, agent = get_components()
+    sim, _, agent = get_components()
     target_date = resolve_target_date(req.date or "today")
     weather_df = sim.weather_fetcher.fetch_weather(
         city=req.city, start_date=target_date, end_date=target_date
@@ -642,7 +662,7 @@ def sense_weather_shock(req: WeatherShockSenseRequest):
 
 @router.post("/agent/weather-shock", tags=["GenAI Agent"])
 def get_weather_shock_alert(req: WeatherShockAdvisoryRequest):
-    _, _, _, agent = get_components()
+    _, _, agent = get_components()
     alert_text = agent.generate_weather_shock_alert(
         city=req.city or "Bengaluru",
         cloud_surge_pct=req.cloud_surge_pct,

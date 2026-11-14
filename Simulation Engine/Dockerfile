@@ -12,7 +12,7 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install -r requirements.txt
 
-COPY *.py ./
+COPY *.py nodes_config.yaml ./
 COPY static ./static
 
 # run as a non-root user; /data holds the SQLite file when DB_BACKEND=sqlite

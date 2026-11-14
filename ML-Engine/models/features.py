@@ -50,7 +50,7 @@ class FeatureEngineer:
         df["cooling_degree_hour"] = np.maximum(0.0, df["temperature_c"] - 24.0)
 
         df["solar_potential_theoretical"] = np.maximum(
-            0.0, df["solar_capacity_kw"] * (df["ghi_w_m2"] / 1000.0) * 0.82
+            0.0, df["solar_capacity_kw"] * (df["ghi_w_m2"] / 1000.0) * 0.95
         )
 
         processed_groups = []

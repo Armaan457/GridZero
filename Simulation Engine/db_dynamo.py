@@ -84,7 +84,8 @@ def insert_ledger(rows):
 
 
 def insert_events(rows):
-    _put(_events, [{**r, "pk": "EVT", "sk": f"{_slot(r):06d}#{time.time_ns()}"} for r in rows])
+    t = time.time_ns()
+    _put(_events, [{**r, "pk": "EVT", "sk": f"{_slot(r):06d}#{t}_{i:04d}"} for i, r in enumerate(rows)])
 
 
 def _query_all(table, cond, forward=True, limit=None):

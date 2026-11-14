@@ -86,13 +86,13 @@ def verify_bedrock(session: boto3.Session, model_id: Optional[str] = None):
 
     print("   Invoking sample prosumer advisory...")
     advisory = agent.generate_advisory(
-        node_name="Aarav Sharma",
+        node_name="Aarav Patel",
         node_type="Solar Champion Prosumer",
         peak_surplus_slot="13:00–15:00",
         peak_surplus_kwh=3.8,
         p10_surplus=2.9,
         p90_surplus=4.4,
-        matched_peer="Iyengar Bakery & Vikram Mehta",
+        matched_peer="Vikram Mehta & Priya Sharma",
         estimated_earnings_inr=19.95,
         grid_comparison_inr=9.31,
     )
@@ -110,7 +110,7 @@ def verify_bedrock(session: boto3.Session, model_id: Optional[str] = None):
         ],
     }
     explanation = agent.generate_shap_explanation(
-        node_name="Aarav Sharma",
+        node_name="Aarav Patel",
         shap_explanation=sample_shap,
         surplus_kwh=3.8,
         slot_time="14:00",

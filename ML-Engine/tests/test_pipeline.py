@@ -12,7 +12,6 @@ from data.generators.weather_fetcher import WeatherFetcher
 from data.generators.indian_load_profile import IndianMicrogridSimulator
 from models.features import FeatureEngineer
 from models.lgbm_forecaster import QuantileEnergyForecaster
-from market.p2p_clearing import MicrogridP2PClearingEngine
 from aws.bedrock_agent import BedrockEnergyAgent
 
 
@@ -22,7 +21,6 @@ class TestP2PESPipeline(unittest.TestCase):
         self.simulator = IndianMicrogridSimulator()
         self.weather_fetcher = WeatherFetcher()
         self.feature_engineer = FeatureEngineer()
-        self.clearing_engine = MicrogridP2PClearingEngine()
         self.bedrock_agent = BedrockEnergyAgent()
 
     def test_01_weather_fetcher(self):
@@ -39,7 +37,7 @@ class TestP2PESPipeline(unittest.TestCase):
         )
         self.assertGreater(len(df), 0)
         node_ids = set(df["node_id"].unique())
-        self.assertEqual(len(node_ids), 5)
+        self.assertEqual(len(node_ids), 10)
         self.assertTrue((df["actual_load_kwh"] >= 0).all())
         self.assertTrue((df["actual_solar_kwh"] >= 0).all())
 
@@ -78,32 +76,20 @@ class TestP2PESPipeline(unittest.TestCase):
         self.assertTrue((preds["pred_solar_p90"] >= preds["pred_solar"]).all())
         self.assertTrue((preds["pred_surplus_p90"] >= preds["pred_surplus_p10"]).all())
 
-    def test_05_p2p_clearing_engine(self):
-        df_test = self.simulator.generate_microgrid_dataset(
-            start_date="2024-03-05", end_date="2024-03-05"
-        )
-        forecaster = QuantileEnergyForecaster()
-        preds = forecaster.predict(df_test)
-
-        results = self.clearing_engine.clear_horizon(preds)
-        self.assertEqual(len(results), 24)
-        summary = self.clearing_engine.summarize_to_dataframe(results)
-        self.assertGreater(summary["community_savings_inr"].sum(), 0.0)
-
     def test_06_bedrock_advisory(self):
         msg = self.bedrock_agent.generate_advisory(
-            node_name="Aarav Sharma",
+            node_name="Aarav Patel",
             node_type="Solar Prosumer",
             peak_surplus_slot="13:00–15:00",
             peak_surplus_kwh=3.5,
             p10_surplus=2.8,
             p90_surplus=4.2,
-            matched_peer="Iyengar Bakery",
+            matched_peer="Vikram Mehta",
             estimated_earnings_inr=18.55,
             grid_comparison_inr=8.58,
         )
         self.assertIsInstance(msg, str)
-        self.assertIn("Aarav Sharma", msg)
+        self.assertIn("Aarav Patel", msg)
         self.assertIn("3.5 kWh", msg)
 
     def test_07_predict_endpoint(self):
@@ -112,13 +98,15 @@ class TestP2PESPipeline(unittest.TestCase):
         client = TestClient(app)
 
         payload = {
-            "node_id": "node_01",
+            "node_id": "A",
             "hour": 14,
             "day": 0,
-            "panel_kw": 5.0,
-            "base_kw": 0.85,
-            "household_size": 3,
-            "appliances": ["AC"],
+            "panel_kw": 3.0,
+            "base_kw": 1.4,
+            "household_size": 4,
+            "appliances": ["fridge", "ac_night", "tv"],
+            "temp_c": 32.5,
+            "cloud_cover": 0.15,
         }
         res = client.post("/predict", json=payload)
         self.assertEqual(res.status_code, 200)
@@ -137,14 +125,14 @@ class TestP2PESPipeline(unittest.TestCase):
 
         res_nodes = client.get("/nodes")
         self.assertEqual(res_nodes.status_code, 200)
-        self.assertEqual(res_nodes.json()["total_nodes"], 5)
+        self.assertEqual(res_nodes.json()["total_nodes"], 10)
 
         res_fc = client.post("/forecast/node", json={
-            "node_id": "node_01",
+            "node_id": "A",
             "datetime_str": "2024-03-05 14:00:00",
             "temperature_c": 31.0,
             "ghi_w_m2": 820.0,
-            "solar_capacity_kw": 5.0,
+            "solar_capacity_kw": 4.5,
         })
         self.assertEqual(res_fc.status_code, 200)
         data = res_fc.json()
@@ -158,11 +146,11 @@ class TestP2PESPipeline(unittest.TestCase):
         client = TestClient(app)
 
         res_explain = client.post("/forecast/explain", json={
-            "node_id": "node_01",
+            "node_id": "A",
             "datetime_str": "2024-03-05 14:00:00",
             "temperature_c": 31.0,
             "ghi_w_m2": 820.0,
-            "solar_capacity_kw": 5.0,
+            "solar_capacity_kw": 4.5,
             "top_k": 3,
         })
         self.assertEqual(res_explain.status_code, 200)
@@ -172,7 +160,7 @@ class TestP2PESPipeline(unittest.TestCase):
         self.assertTrue(len(data["shap_drivers"]["solar_drivers"]) > 0)
 
         res_adv = client.post("/agent/advisory", json={
-            "node_id": "node_01",
+            "node_id": "A",
             "date": "2024-03-05",
             "include_shap": True,
         })

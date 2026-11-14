@@ -1,0 +1,278 @@
+microgrid_id: "mg_bengaluru_east_01"
+grid_reference_rates:
+  grid_import_inr_per_kwh: 8.00
+  grid_export_inr_per_kwh: 3.00
+  grid_wheeling_fee_inr_per_kwh: 0.50
+  p2p_base_price_inr_per_kwh: 5.25
+
+nodes:
+  - id: "A"
+    name: "Aarav Sharma (Solar Champion)"
+    type: "residential_prosumer"
+    household_size: 3
+    city: "Bengaluru"
+    feeder: "Feeder-1"
+    solar_capacity_kw: 4.5
+    battery_capacity_kwh: 8.0
+    battery_max_discharge_kw: 3.0
+    appliances:
+      base_fridge_led_kw: 0.28
+      ac_units: 1
+      ac_power_kw: 1.5
+      geyser_power_kw: 0.0
+      has_ev: false
+      catalog:
+        - "fridge"
+        - "lights"
+        - "fan"
+        - "tv"
+        - "laptop"
+        - "ac_night"
+    behavior:
+      ac_temp_threshold_c: 29.5
+      ac_hours: [[22, 7]]
+
+  - id: "B"
+    name: "Vikram Mehta (Heavy Residential)"
+    type: "residential_consumer"
+    household_size: 5
+    city: "Bengaluru"
+    feeder: "Feeder-1"
+    solar_capacity_kw: 0.0
+    battery_capacity_kwh: 0.0
+    appliances:
+      base_fridge_led_kw: 0.45
+      ac_units: 2
+      ac_power_kw: 3.0
+      geyser_power_kw: 2.0
+      has_ev: false
+      catalog:
+        - "fridge"
+        - "lights"
+        - "fan"
+        - "tv"
+        - type: "washer"
+          flexible: true
+          start: 8
+          end: 17
+          duration_h: 1
+        - "geyser"
+        - "ac"
+        - "ac_night"
+    behavior:
+      ac_temp_threshold_c: 28.0
+      ac_hours: [[12, 18], [22, 7]]
+      geyser_hours: [[6, 8]]
+
+  - id: "C"
+    name: "Chitra Raman (Solar Prosumer)"
+    type: "residential_prosumer"
+    household_size: 3
+    city: "Bengaluru"
+    feeder: "Feeder-1"
+    solar_capacity_kw: 3.0
+    battery_capacity_kwh: 0.0
+    appliances:
+      base_fridge_led_kw: 0.25
+      ac_units: 0
+      ac_power_kw: 0.0
+      geyser_power_kw: 0.0
+      has_ev: false
+      catalog:
+        - "fridge"
+        - "lights"
+        - "fan"
+        - "tv"
+        - "laptop"
+    behavior: {}
+
+  - id: "D"
+    name: "Deepak Patel (Night AC Consumer)"
+    type: "residential_consumer"
+    household_size: 4
+    city: "Bengaluru"
+    feeder: "Feeder-1"
+    solar_capacity_kw: 0.0
+    battery_capacity_kwh: 0.0
+    appliances:
+      base_fridge_led_kw: 0.35
+      ac_units: 1
+      ac_power_kw: 1.5
+      geyser_power_kw: 2.0
+      has_ev: false
+      catalog:
+        - "fridge"
+        - "lights"
+        - "fan"
+        - "tv"
+        - "geyser"
+        - "ac_night"
+    behavior:
+      ac_temp_threshold_c: 29.0
+      ac_hours: [[22, 7]]
+      geyser_hours: [[6, 8]]
+
+  - id: "E"
+    name: "Esha Nair (EV & Storage Prosumer)"
+    type: "flexible_prosumer"
+    household_size: 4
+    city: "Bengaluru"
+    feeder: "Feeder-1"
+    solar_capacity_kw: 4.0
+    battery_capacity_kwh: 8.0
+    battery_max_discharge_kw: 3.0
+    appliances:
+      base_fridge_led_kw: 0.35
+      ac_units: 1
+      ac_power_kw: 1.5
+      geyser_power_kw: 0.0
+      has_ev: true
+      ev_charger_kw: 3.3
+      catalog:
+        - "fridge"
+        - "lights"
+        - "fan"
+        - "tv"
+        - "washer"
+        - "ac_night"
+        - "ev"
+    behavior:
+      ac_temp_threshold_c: 29.0
+      ac_hours: [[22, 7]]
+      ev_charging_target_hours: [[9, 23]]
+
+  - id: "F"
+    name: "Farhan Ali (Large Household)"
+    type: "residential_consumer"
+    household_size: 6
+    city: "Bengaluru"
+    feeder: "Feeder-1"
+    solar_capacity_kw: 0.0
+    battery_capacity_kwh: 0.0
+    appliances:
+      base_fridge_led_kw: 0.50
+      ac_units: 2
+      ac_power_kw: 3.0
+      geyser_power_kw: 2.0
+      has_ev: false
+      catalog:
+        - "fridge"
+        - "lights"
+        - "fan"
+        - "tv"
+        - type: "washer"
+          flexible: true
+          start: 8
+          end: 17
+          duration_h: 1
+        - "geyser"
+        - "ac"
+        - "ac_night"
+        - "induction"
+    behavior:
+      ac_temp_threshold_c: 28.5
+      ac_hours: [[12, 18], [22, 7]]
+      geyser_hours: [[6, 8]]
+
+  - id: "G"
+    name: "Gita Kulkarni (Frugal Senior Prosumer)"
+    type: "residential_prosumer"
+    household_size: 3
+    city: "Bengaluru"
+    feeder: "Feeder-1"
+    solar_capacity_kw: 2.0
+    battery_capacity_kwh: 0.0
+    appliances:
+      base_fridge_led_kw: 0.20
+      ac_units: 0
+      ac_power_kw: 0.0
+      geyser_power_kw: 0.0
+      has_ev: false
+      catalog:
+        - "fridge"
+        - "lights"
+        - "fan"
+        - "tv"
+    behavior: {}
+
+  - id: "H"
+    name: "Harish Rao (Daytime AC Consumer)"
+    type: "residential_consumer"
+    household_size: 4
+    city: "Bengaluru"
+    feeder: "Feeder-1"
+    solar_capacity_kw: 0.0
+    battery_capacity_kwh: 0.0
+    appliances:
+      base_fridge_led_kw: 0.35
+      ac_units: 1
+      ac_power_kw: 1.5
+      geyser_power_kw: 2.0
+      has_ev: false
+      catalog:
+        - "fridge"
+        - "lights"
+        - "fan"
+        - "tv"
+        - "ac"
+        - "geyser"
+    behavior:
+      ac_temp_threshold_c: 28.0
+      ac_hours: [[12, 18]]
+      geyser_hours: [[6, 8]]
+
+  - id: "I"
+    name: "Ishaan Verma (Joint Family with Pump)"
+    type: "residential_consumer"
+    household_size: 7
+    city: "Bengaluru"
+    feeder: "Feeder-1"
+    solar_capacity_kw: 0.0
+    battery_capacity_kwh: 0.0
+    appliances:
+      base_fridge_led_kw: 0.60
+      ac_units: 2
+      ac_power_kw: 3.0
+      geyser_power_kw: 2.0
+      has_ev: false
+      catalog:
+        - "fridge"
+        - "lights"
+        - "fan"
+        - "tv"
+        - "washer"
+        - "geyser"
+        - "ac"
+        - "ac"
+        - "induction"
+        - type: "pump"
+          flexible: true
+          start: 6
+          end: 18
+          duration_h: 1
+    behavior:
+      ac_temp_threshold_c: 28.0
+      ac_hours: [[12, 18]]
+      geyser_hours: [[6, 8]]
+
+  - id: "J"
+    name: "Jayesh Shah (Modest Consumer)"
+    type: "residential_consumer"
+    household_size: 3
+    city: "Bengaluru"
+    feeder: "Feeder-1"
+    solar_capacity_kw: 0.0
+    battery_capacity_kwh: 0.0
+    appliances:
+      base_fridge_led_kw: 0.25
+      ac_units: 0
+      ac_power_kw: 0.0
+      geyser_power_kw: 0.0
+      has_ev: false
+      catalog:
+        - "fridge"
+        - "lights"
+        - "fan"
+        - "tv"
+        - "laptop"
+    behavior: {}

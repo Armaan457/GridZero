@@ -11,7 +11,7 @@ Each simulated hour (one "slot") the engine:
 Energy is not physically routed: it is a virtual allocation of exports to imports in the same feeder
 and the same hour (virtual-net-metering style).
 """
-import copy, csv, random, re
+import copy, csv, os, random, re, yaml
 import appliances as ap
 import forecast
 from allocators import static_alloc, dynamic_alloc, hybrid_alloc, EPS
@@ -89,7 +89,42 @@ def new_stats():
                 abs_err_load=0.0, abs_err_solar=0.0, n_err=0, peak_grid=0.0, peak_base=0.0)
 
 
+def load_nodes_from_config(config_path=None):
+    path = config_path or os.environ.get("NODES_CONFIG_PATH") or os.path.join(os.path.dirname(__file__), "nodes_config.yaml")
+    if not os.path.exists(path):
+        return None
+
+    with open(path, "r", encoding="utf-8") as f:
+        data = yaml.safe_load(f)
+
+    if not data or "nodes" not in data:
+        return None
+
+    nodes = []
+    for n in data["nodes"]:
+        nid = str(n["id"])
+        panel_kw = float(n.get("solar_capacity_kw") or n.get("panel_kw") or 0.0)
+        battery_kwh = float(n.get("battery_capacity_kwh") or n.get("battery_kwh") or 0.0)
+        household_size = int(n.get("household_size") or 4)
+        feeder = str(n.get("feeder") or "Feeder-1")
+
+        raw_apps = n.get("appliances", [])
+        if isinstance(raw_apps, dict):
+            app_list = raw_apps.get("catalog", [])
+        elif isinstance(raw_apps, list):
+            app_list = raw_apps
+        else:
+            app_list = []
+
+        apps = [_mk(t) for t in app_list] if app_list else ap.default_appliances(household_size)
+        nodes.append(Node(nid, panel_kw, battery_kwh, household_size, feeder, appliances=apps))
+    return nodes
+
+
 def make_nodes():
+    loaded = load_nodes_from_config()
+    if loaded:
+        return loaded
     flex_washer = ("washer", dict(flexible=True, start=8, end=17, duration_h=1))
     spec = [  # id, solar kW, battery kWh, household size, appliances
         ("A", 4.5, 8, 3, ["fridge", "lights", "fan", "tv", "laptop", "ac_night"]),
