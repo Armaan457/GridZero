@@ -1,0 +1,16 @@
+services:
+  simulation-engine:
+    build:
+      context: ./Simulation Engine
+    ports:
+      - "8000:8000"
+    environment:
+      - FORECAST_URL=http://ml-engine:8000/predict
+    depends_on:
+      - ml-engine
+
+  ml-engine:
+    build:
+      context: ./ML-Engine
+    ports:
+      - "8001:8000"

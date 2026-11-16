@@ -1,5 +1,4 @@
-
-name: Deploy ML Engine to AWS ECS
+name: Deploy to AWS ECS
 
 on:
   push:
@@ -7,6 +6,7 @@ on:
       - main
     paths:
       - 'ML-Engine/**'
+      - 'Simulation Engine/**'
       - '.github/workflows/deploy-ecs.yml'
   workflow_dispatch:
 
@@ -15,36 +15,32 @@ permissions:
   id-token: write
 
 concurrency:
-  group: p2p-ml-engine-deploy
+  group: p2p-ecs-deploy
   cancel-in-progress: false
-
-env:
-  AWS_REGION: us-east-1
-  ECR_REPOSITORY: p2p-ml-engine
-  ECS_CLUSTER: p2p-cluster
-  ECS_SERVICE: p2p-ml-engine-service
-  ECS_TASK_DEFINITION: ML-Engine/aws/ecs-task-definition.json
-  CONTAINER_NAME: p2p-ml-engine
 
 jobs:
   deploy:
-    name: Build, Push and Deploy
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        service:
+          - name: p2p-ml-engine
+            dir: ML-Engine
+            task_def: ML-Engine/aws/ecs-task-definition.json
+          - name: p2p-simulation-engine
+            dir: Simulation Engine
+            task_def: Simulation Engine/aws/ecs-task-definition.json
 
     steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-
-      - name: Configure AWS Credentials via OIDC
-        uses: aws-actions/configure-aws-credentials@v4
+      - uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
-          aws-region: ${{ env.AWS_REGION }}
+          aws-region: us-east-1
 
-      - name: Log in to Amazon ECR
+      - uses: aws-actions/amazon-ecr-login@v2
         id: login-ecr
-        uses: aws-actions/amazon-ecr-login@v2
 
       - name: Build, tag, and push Docker image
         id: build-image
@@ -54,57 +50,41 @@ jobs:
         run: |
           docker buildx build \
             --platform linux/amd64 \
-            --file ML-Engine/Dockerfile \
-            --tag "$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" \
-            --tag "$ECR_REGISTRY/$ECR_REPOSITORY:latest" \
+            --file "${{ matrix.service.dir }}/Dockerfile" \
+            --tag "$ECR_REGISTRY/${{ matrix.service.name }}:$IMAGE_TAG" \
+            --tag "$ECR_REGISTRY/${{ matrix.service.name }}:latest" \
             --push \
-            ML-Engine
+            "${{ matrix.service.dir }}"
 
-          echo "image=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" >> "$GITHUB_OUTPUT"
+          echo "image=$ECR_REGISTRY/${{ matrix.service.name }}:$IMAGE_TAG" >> "$GITHUB_OUTPUT"
 
       - name: Inject Secrets Manager ARN
         env:
           SECRET_ARN: ${{ vars.FRIENDS_SECRET_ARN }}
         run: |
           set -euo pipefail
-
-          test -n "$SECRET_ARN" || {
-            echo "FRIENDS_SECRET_ARN repository variable is missing"
-            exit 1
-          }
-
-          jq --arg arn "$SECRET_ARN" '
+          test -n "$SECRET_ARN" || { echo "FRIENDS_SECRET_ARN missing"; exit 1; }
+          jq --arg arn "$SECRET_ARN" --arg name "${{ matrix.service.name }}" '
             .containerDefinitions |= map(
-              if .name == "p2p-ml-engine" then
+              if .name == $name then
                 .secrets |= map(
                   .valueFrom |= sub("^FRIENDS_SECRET_ARN"; $arn)
                 )
               else .
               end
             )
-          ' "$ECS_TASK_DEFINITION" > "$RUNNER_TEMP/ecs-task-definition.json"
+          ' "${{ matrix.service.task_def }}" > "$RUNNER_TEMP/ecs-task-definition.json"
 
-          jq -e '
-            all(
-              .containerDefinitions[]
-              | select(.name == "p2p-ml-engine")
-              | .secrets[]?;
-              (.valueFrom | startswith("arn:aws:secretsmanager:"))
-            )
-          ' "$RUNNER_TEMP/ecs-task-definition.json" > /dev/null
-
-      - name: Render Amazon ECS task definition
+      - uses: aws-actions/amazon-ecs-render-task-definition@v1
         id: task-def
-        uses: aws-actions/amazon-ecs-render-task-definition@v1
         with:
           task-definition: ${{ runner.temp }}/ecs-task-definition.json
-          container-name: ${{ env.CONTAINER_NAME }}
+          container-name: ${{ matrix.service.name }}
           image: ${{ steps.build-image.outputs.image }}
 
-      - name: Deploy Amazon ECS task definition
-        uses: aws-actions/amazon-ecs-deploy-task-definition@v2
+      - uses: aws-actions/amazon-ecs-deploy-task-definition@v2
         with:
           task-definition: ${{ steps.task-def.outputs.task-definition }}
-          service: ${{ env.ECS_SERVICE }}
-          cluster: ${{ env.ECS_CLUSTER }}
+          service: ${{ matrix.service.name }}-service
+          cluster: p2p-cluster
           wait-for-service-stability: true

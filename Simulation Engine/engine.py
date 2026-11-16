@@ -185,6 +185,7 @@ class Engine:
             n.soc = n.cap * 0.5
             n.appliances = [a for a in n.appliances if not a.get("once")]
             for a in n.appliances: a.pop("sched", None); a.pop("sched_day", None)
+        forecast.clear_cache()
         self.reschedule()
 
     def ctx(self):

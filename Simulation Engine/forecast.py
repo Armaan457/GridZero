@@ -20,6 +20,15 @@ import appliances as ap
 
 FORECAST_URL = os.environ.get("FORECAST_URL", "").strip()
 
+_CACHE = {}
+_CACHED_DAY = None
+
+
+def clear_cache():
+    global _CACHE, _CACHED_DAY
+    _CACHE.clear()
+    _CACHED_DAY = None
+
 
 def load_shape(hour):
     """Fallback household curve (used only when a node has no appliance details)."""
@@ -50,19 +59,47 @@ def baseline_predict(meta, day, hour, ctx=None):
 
 
 def predict(meta, day, hour, ctx=None):
-    """Return (pred_load_kwh, pred_solar_kwh, source) for one node and one hourly slot."""
+    global _CACHE, _CACHED_DAY
     ctx = ctx or {}
+
     if FORECAST_URL:
+        if _CACHED_DAY != day:
+            _CACHE.clear()
+            _CACHED_DAY = day
+
+        key = (meta["id"], hour)
+        if key in _CACHE:
+            load, solar = _CACHE[key]
+            return load, solar, "agent"
+
         try:
-            body = json.dumps({"node_id": meta["id"], "day": day, "hour": hour, "panel_kw": meta["panel_kw"],
-                               "base_kw": meta.get("base_kw"), "household_size": meta.get("household_size"),
-                               "appliances": meta.get("appliances"), "appliance_details": meta.get("appliance_details"),
-                               "temp_c": ctx.get("temp_c", 30.0), "cloud_cover": ctx.get("cloud_cover", 0.15)}).encode()
+            body = json.dumps({
+                "node_id": meta["id"],
+                "day": day,
+                "panel_kw": meta["panel_kw"],
+                "base_kw": meta.get("base_kw"),
+                "household_size": meta.get("household_size"),
+                "appliances": meta.get("appliances"),
+                "appliance_details": meta.get("appliance_details"),
+                "temp_c": ctx.get("temp_c", 30.0),
+                "cloud_cover": ctx.get("cloud_cover", 0.15)
+            }).encode()
             req = urllib.request.Request(FORECAST_URL, body, {"Content-Type": "application/json"})
-            with urllib.request.urlopen(req, timeout=1.5) as r:
+            with urllib.request.urlopen(req, timeout=2.5) as r:
                 out = json.loads(r.read())
-            return float(out["pred_load"]), float(out["pred_solar"]), "agent"
+
+            if "hours" in out:
+                for row in out["hours"]:
+                    _CACHE[(meta["id"], int(row["hour"]))] = (float(row["pred_load"]), float(row["pred_solar"]))
+                if key in _CACHE:
+                    load, solar = _CACHE[key]
+                    return load, solar, "agent"
+            elif "pred_load" in out:
+                load, solar = float(out["pred_load"]), float(out["pred_solar"])
+                _CACHE[key] = (load, solar)
+                return load, solar, "agent"
         except Exception:
-            pass                                          # fall through to baseline
+            pass
+
     l, s = baseline_predict(meta, day, hour, ctx)
     return l, s, "baseline"

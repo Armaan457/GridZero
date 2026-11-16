@@ -258,56 +258,63 @@ def predict_slot(payload: SlotPredictRequest):
         ac_units = sum(1 for a in appliances if str(a).lower().startswith("ac"))
         has_ev = int(any(str(a).lower() == "ev" for a in appliances))
 
-    weather = _weather_for_hour(payload.hour, payload.temp_c, payload.cloud_cover)
-    when = pd.Timestamp("2024-03-04") + pd.Timedelta(days=int(payload.day), hours=int(payload.hour))
+    hours = range(24) if payload.hour is None else [payload.hour]
+    results = []
 
-    if payload.appliance_details:
-        current_load = ap.STANDBY_KW + sum(
-            ap.expected_kw(a, payload.day, payload.hour, weather["temperature_c"])
-            for a in payload.appliance_details
-        )
-    else:
-        fallback_curve = (0.6 + 0.5 * math.exp(-((payload.hour - 8) ** 2) / 4)
-                          + 0.5 * math.exp(-((payload.hour - 15) ** 2) / 6)
-                          + 0.9 * math.exp(-((payload.hour - 20) ** 2) / 5))
-        current_load = float(payload.base_kw or 1.0) * fallback_curve
+    for h in hours:
+        weather = _weather_for_hour(h, payload.temp_c, payload.cloud_cover)
+        when = pd.Timestamp("2024-03-04") + pd.Timedelta(days=int(payload.day), hours=int(h))
 
-    s_shape = ap.solar_shape(payload.hour)
-    s_factor = ap.solar_factor(weather["cloud_cover_pct"] / 100.0)
-    current_solar = float(payload.panel_kw) * s_shape * s_factor * 0.95
+        if payload.appliance_details:
+            current_load = ap.STANDBY_KW + sum(
+                ap.expected_kw(a, payload.day, h, weather["temperature_c"])
+                for a in payload.appliance_details
+            )
+        else:
+            fallback_curve = (0.6 + 0.5 * math.exp(-((h - 8) ** 2) / 4)
+                              + 0.5 * math.exp(-((h - 15) ** 2) / 6)
+                              + 0.9 * math.exp(-((h - 20) ** 2) / 5))
+            current_load = float(payload.base_kw or 1.0) * fallback_curve
 
-    # Maintain rolling history per node for multi-hour lag/rolling feature fidelity
-    history = _NODE_RECENT_HISTORY[payload.node_id]
-    if not history or history[-1]["datetime"] >= when:
-        history = _seed_node_history(payload.node_id, when, payload, ac_units, has_ev)
+        s_shape = ap.solar_shape(h)
+        s_factor = ap.solar_factor(weather["cloud_cover_pct"] / 100.0)
+        current_solar = float(payload.panel_kw) * s_shape * s_factor * 0.95
 
-    current_row = {
-        "datetime": when,
-        "node_id": payload.node_id,
-        "temperature_c": weather["temperature_c"],
-        "ghi_w_m2": weather["ghi_w_m2"],
-        "dni_w_m2": weather["dni_w_m2"],
-        "dhi_w_m2": weather["dhi_w_m2"],
-        "cloud_cover_pct": weather["cloud_cover_pct"],
-        "humidity_pct": weather["humidity_pct"],
-        "solar_capacity_kw": float(payload.panel_kw),
-        "household_size": int(payload.household_size or 3),
-        "ac_units": ac_units,
-        "has_ev": has_ev,
-        "actual_load_kwh": round(current_load, 3),
-        "actual_solar_kwh": round(current_solar, 3),
-    }
-    history.append(current_row)
-    if len(history) > 168:
-        history = history[-168:]
-    _NODE_RECENT_HISTORY[payload.node_id] = history
+        history = _NODE_RECENT_HISTORY[payload.node_id]
+        if not history or history[-1]["datetime"] >= when:
+            history = _seed_node_history(payload.node_id, when, payload, ac_units, has_ev)
 
-    df_hist = pd.DataFrame(history)
-    preds = forecaster.predict(df_hist).iloc[-1]
-    pred_load = max(0.0, float(preds["pred_load"]))
-    pred_solar = max(0.0, float(preds["pred_solar"])) if payload.panel_kw > 0 else 0.0
+        current_row = {
+            "datetime": when,
+            "node_id": payload.node_id,
+            "temperature_c": weather["temperature_c"],
+            "ghi_w_m2": weather["ghi_w_m2"],
+            "dni_w_m2": weather["dni_w_m2"],
+            "dhi_w_m2": weather["dhi_w_m2"],
+            "cloud_cover_pct": weather["cloud_cover_pct"],
+            "humidity_pct": weather["humidity_pct"],
+            "solar_capacity_kw": float(payload.panel_kw),
+            "household_size": int(payload.household_size or 3),
+            "ac_units": ac_units,
+            "has_ev": has_ev,
+            "actual_load_kwh": round(current_load, 3),
+            "actual_solar_kwh": round(current_solar, 3),
+        }
+        history.append(current_row)
+        if len(history) > 168:
+            history = history[-168:]
+        _NODE_RECENT_HISTORY[payload.node_id] = history
 
-    return {"pred_load": round(pred_load, 4), "pred_solar": round(pred_solar, 4)}
+        df_hist = pd.DataFrame(history)
+        preds = forecaster.predict(df_hist).iloc[-1]
+        pred_load = max(0.0, float(preds["pred_load"]))
+        pred_solar = max(0.0, float(preds["pred_solar"])) if payload.panel_kw > 0 else 0.0
+
+        results.append({"hour": h, "pred_load": round(pred_load, 4), "pred_solar": round(pred_solar, 4)})
+
+    if payload.hour is None:
+        return {"hours": results}
+    return {"pred_load": results[0]["pred_load"], "pred_solar": results[0]["pred_solar"]}
 
 
 @router.post("/forecast/node", response_model=SingleNodeForecastResponse, tags=["Forecasting"])

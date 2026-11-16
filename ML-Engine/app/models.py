@@ -92,7 +92,7 @@ class WeatherShockAdvisoryRequest(BaseModel):
 
 class SlotPredictRequest(BaseModel):
     node_id: str = Field(..., example="B")
-    hour: int = Field(..., ge=0, le=23, example=14)
+    hour: Optional[int] = Field(None, ge=0, le=23, example=14)
     day: int = Field(0, example=0)
     panel_kw: float = Field(0.0, example=0.0)
     base_kw: float = Field(1.0, example=1.4)
