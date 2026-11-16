@@ -21,47 +21,53 @@ Traditional setups sell rooftop solar back to the utility at low feed-in tariffs
 
 ## System Architecture
 
+<div align="center">
+<div style="max-width: 680px;">
+
 ```mermaid
+%%{init: {'flowchart': {'nodeSpacing': 25, 'rankSpacing': 30}}}%%
 flowchart TD
-    subgraph UI ["Frontend · Next.js 16 (Port 3000)"]
-        Views["Live Feeder Flow · Dashboard · Policy Comparison · Statement"]
-        Controls["Simulation & Scenario Controls (Speed, Load Injection, Outage)"]
+    subgraph UI ["Frontend · Next.js 16 (:3000)"]
+        Views["Live Feeder Flow & Dashboard"]
+        Controls["Scenario & Simulation Controls"]
     end
 
-    subgraph SIM ["Simulation & Settlement Engine · FastAPI (Port 8000)"]
-        SimServer["Async Simulation Loop & Clock (server.py · engine.py)"]
-        Meters["Virtual Smart Meters & Batteries (10 Archetype Nodes)"]
-        Allocators["Matching Policies: Static, Dynamic, Hybrid (allocators.py)"]
-        Pricing["Dynamic Scarcity Pricing (₹3.00 - ₹7.50 / kWh)"]
-        DB[("Database · DynamoDB / SQLite (Ledger & Telemetry)")]
+    subgraph SIM ["Simulation & Settlement Engine · FastAPI (:8000)"]
+        SimServer["Async Simulation Clock"]
+        Meters["Smart Meters & Batteries (10 Nodes)"]
+        Allocators["Matching: Static · Dynamic · Hybrid"]
+        Pricing["Scarcity Pricing (₹3.00–₹7.50/kWh)"]
+        DB[("DynamoDB / SQLite Ledger")]
         
-        SimServer --> Meters
-        Meters --> Allocators
-        Allocators --> Pricing
-        Pricing --> DB
+        SimServer --> Meters --> Allocators --> Pricing --> DB
     end
 
-    subgraph ML ["ML & Intelligence Service · FastAPI (Port 8001)"]
-        MLServer["Inference API (POST /predict · /agent/advisory)"]
-        Weather["Open-Meteo API (Solar GHI, DNI, Cloud Cover)"]
-        LGBM["LightGBM Quantile Forecaster (P10, P50, P90)"]
-        Bedrock["Amazon Bedrock Agent (Nova Lite · Advisories & SHAP XAI)"]
+    subgraph ML ["ML Intelligence Service · FastAPI (:8001)"]
+        MLServer["Inference API"]
+        Weather["Open-Meteo Weather API"]
+        Training["Retraining Pipeline"]
+        LGBM["LightGBM Forecaster (P10/P50/P90)"]
+        SHAP["SHAP Explainer"]
+        Bedrock["Amazon Bedrock GenAI"]
         
         Weather --> LGBM
-        MLServer --> LGBM
-        LGBM --> Bedrock
+        Training --> LGBM
+        MLServer --> LGBM --> SHAP --> Bedrock
     end
 
     subgraph Settlement ["Settlement & Physical Grid"]
-        DISCOM["DISCOM Utility (Virtual Net-Metering + ₹0.50/kWh Fee)"]
-        Wallet["Platform Wallet (P2P Rupee Clearing)"]
+        DISCOM["DISCOM Utility Net-Metering"]
+        Wallet["P2P Financial Clearing Wallet"]
     end
 
     UI -->|Next.js Proxy /engine| SimServer
-    Meters -->|POST /predict| MLServer
-    Allocators -->|Grid Import / Export Residuals| DISCOM
-    Pricing -->|P2P Financial Settlement| Wallet
+    SimServer -->|POST /predict| MLServer
+    Allocators -->|Grid Import / Export| DISCOM
+    Pricing -->|P2P Rupee Settlement| Wallet
 ```
+
+</div>
+</div>
 
 ---
 
