@@ -7,7 +7,6 @@
   "cpu": "512",
   "memory": "1024",
   "executionRoleArn": "arn:aws:iam::667958380608:role/ecsTaskExecutionRole",
-  "taskRoleArn": "arn:aws:iam::667958380608:role/p2p-simulation-engine-task-role",
   "containerDefinitions": [
     {
       "name": "p2p-simulation-engine",
